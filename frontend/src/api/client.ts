@@ -1,6 +1,8 @@
 // ─── Demo mode ───────────────────────────────────────────────────────────────
-// Activated via: ?demo=true URL param, localStorage flag, or VITE_DEMO_MODE env var (set in Vercel).
+// On Vercel (production build) demo mode is always on — no backend is deployed.
+// Also activated via: ?demo=true URL param, localStorage flag, or VITE_DEMO_MODE env var.
 export const DEMO_MODE =
+  import.meta.env.PROD ||
   import.meta.env.VITE_DEMO_MODE === 'true' ||
   new URLSearchParams(location.search).get('demo') === 'true' ||
   localStorage.getItem('echo_demo_mode') === 'true'
