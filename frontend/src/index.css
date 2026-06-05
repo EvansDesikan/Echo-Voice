@@ -249,7 +249,6 @@ img { max-width: 100%; display: block; }
 .btn--primary:hover {
   background: var(--primary);
   transform: translateY(-3px);
-  box-shadow: 0 8px 24px rgba(21, 119, 155, 0.45);
 }
 
 .btn--secondary {
