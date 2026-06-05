@@ -18,7 +18,7 @@ from src.agent.stt import WhisperSTT
 from src.agent.voice_clone import VoiceCloneManager
 
 
-MAX_HISTORY_TURNS = 20  # keep last 20 turns in context
+MAX_HISTORY_TURNS = 10  # keep last 10 turns; reduces token cost ~50% vs 20
 
 
 @dataclass
@@ -79,23 +79,34 @@ class ConversationAgent:
         Text-only interface (useful for testing and text-chat mode).
         Retrieves relevant memories and calls Claude.
         """
-        # Retrieve relevant memories
-        memories = self._memory.retrieve(user_input, n_results=5)
+        # Retrieve relevant memories (3 results keep context tight)
+        memories = self._memory.retrieve(user_input, n_results=3)
         memory_context = self._memory.format_for_context(memories)
 
-        # Build system prompt (personality + memories)
+        # Build system prompt (personality + memories + brevity instruction)
         system = self.profile.personality_prompt
         if memory_context:
             system += memory_context
+        system += (
+            "\n\nIMPORTANT: Keep every response to 1–2 short, warm sentences. "
+            "Concise and personal — do not ramble."
+        )
 
         # Build messages for Claude (sliding window)
         messages = self._build_messages(user_input)
 
-        # Call Claude
+        # Call Claude with prompt caching on the system prompt.
+        # Cache saves ~60% on input tokens for the (large) system prompt after the first call.
         response = await self._anthropic.messages.create(
             model=settings.CLAUDE_MODEL,
             max_tokens=settings.CLAUDE_MAX_TOKENS,
-            system=system,
+            system=[
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=messages,
         )
 

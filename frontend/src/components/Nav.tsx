@@ -1,11 +1,13 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useLang } from '../context/LanguageContext'
+import { useTheme } from '../context/ThemeContext'
 import type { Lang } from '../i18n/translations'
 
 export default function Nav() {
   const location = useLocation()
   const isFamily = location.pathname.startsWith('/family')
   const { lang, setLang, T } = useLang()
+  const { theme, toggleTheme } = useTheme()
 
   return (
     <nav className="nav">
@@ -31,6 +33,16 @@ export default function Nav() {
               </li>
             </ul>
           )}
+
+          {/* Theme toggle */}
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          >
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
 
           {/* Language toggle */}
           <div style={{

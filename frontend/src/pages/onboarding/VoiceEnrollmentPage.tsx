@@ -173,7 +173,7 @@ export default function VoiceEnrollmentPage() {
             <button
               className="mic-btn"
               onClick={startRecording}
-              title="Aufnahme starten"
+              title={T.voice_mic_start}
             >
               <Mic size={28} />
             </button>
@@ -183,7 +183,7 @@ export default function VoiceEnrollmentPage() {
             <button
               className="mic-btn mic-btn--recording"
               onClick={stopRecording}
-              title="Aufnahme stoppen"
+              title={T.voice_mic_stop}
             >
               <Square size={22} />
             </button>

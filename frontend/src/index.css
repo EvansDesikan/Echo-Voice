@@ -56,6 +56,56 @@
   --transition: 200ms ease;
 }
 
+/* ─── Dark mode overrides ────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --primary:         #3fa8cc;
+  --primary-hover:   #5cbcde;
+  --primary-light:   #1a3a47;
+  --primary-faint:   #162d38;
+
+  --text:            #e8e8e8;
+  --text-secondary:  #a8a8a8;
+  --text-muted:      #6e6e6e;
+
+  --bg:              #121212;
+  --bg-subtle:       #1e1e1e;
+  --bg-card:         #1a1a1a;
+
+  --border:          #2e2e2e;
+  --border-light:    #252525;
+
+  --success:         #4db87e;
+  --warning:         #f59e0b;
+  --danger:          #e05c4b;
+
+  --shadow-sm:  0 1px 4px rgba(0, 0, 0, 0.4);
+  --shadow:     0 2px 12px rgba(0, 0, 0, 0.5);
+  --shadow-md:  0 4px 24px rgba(0, 0, 0, 0.6);
+  --shadow-lg:  0 8px 40px rgba(0, 0, 0, 0.7);
+}
+
+/* ─── Theme toggle button ────────────────────────────────────────────────── */
+.theme-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
 /* ─── Reset ─────────────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
