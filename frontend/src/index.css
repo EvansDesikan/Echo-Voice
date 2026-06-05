@@ -240,15 +240,16 @@ img { max-width: 100%; display: block; }
   user-select: none;
 }
 
-.btn:active { transform: translateY(1px); }
+.btn:active { transform: translateY(2px); box-shadow: none !important; }
 
 .btn--primary {
   background: var(--primary);
   color: #ffffff;
 }
 .btn--primary:hover {
-  background: var(--primary-hover);
-  box-shadow: 0 4px 16px rgba(21, 119, 155, 0.35);
+  background: var(--primary);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(21, 119, 155, 0.45);
 }
 
 .btn--secondary {
@@ -257,7 +258,9 @@ img { max-width: 100%; display: block; }
   border: 1.5px solid var(--primary);
 }
 .btn--secondary:hover {
-  background: var(--primary-faint);
+  background: var(--bg);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(21, 119, 155, 0.20);
 }
 
 .btn--ghost {
