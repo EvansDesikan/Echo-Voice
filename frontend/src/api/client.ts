@@ -1,0 +1,163 @@
+// ─── Demo mode ───────────────────────────────────────────────────────────────
+// Activated via: ?demo=true URL param, localStorage flag, or VITE_DEMO_MODE env var (set in Vercel).
+export const DEMO_MODE =
+  import.meta.env.VITE_DEMO_MODE === 'true' ||
+  new URLSearchParams(location.search).get('demo') === 'true' ||
+  localStorage.getItem('echo_demo_mode') === 'true'
+
+if (DEMO_MODE) {
+  localStorage.setItem('echo_demo_mode', 'true')
+  localStorage.setItem('echo_client_id', 'demo-client-00000000-0000-0000-0000-000000000001')
+  localStorage.setItem('echo_client_name', 'Maria Müller')
+  localStorage.setItem('echo_session_id', 'demo-session-00000000-0000-0000-0000-000000000002')
+  localStorage.setItem('echo_persona_name', 'Maria Müller')
+}
+
+function delay(ms = 600) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+// ─── HTTP helpers ─────────────────────────────────────────────────────────────
+const BASE = '/api'
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Request failed' }))
+    throw new Error(err.detail || 'Request failed')
+  }
+  return res.json()
+}
+
+// ─── Onboarding ──────────────────────────────────────────────────────────────
+
+export interface ConsentResponse {
+  client_id: string
+  message: string
+}
+
+export async function registerConsent(data: {
+  client_name: string
+  email: string
+  language: string
+  consented: boolean
+}): Promise<ConsentResponse> {
+  if (DEMO_MODE) {
+    await delay()
+    const id = 'demo-client-00000000-0000-0000-0000-000000000001'
+    localStorage.setItem('echo_client_id', id)
+    localStorage.setItem('echo_client_name', data.client_name || 'Maria Müller')
+    return { client_id: id, message: 'Demo-Einwilligung erteilt.' }
+  }
+  return post('/onboard/consent', data)
+}
+
+export async function submitQuestionnaire(data: {
+  client_id: string
+  answers: Record<string, number>
+}): Promise<{ ocean_scores: Record<string, number>; behavioral_tags: string[] }> {
+  if (DEMO_MODE) {
+    await delay()
+    return {
+      ocean_scores: { O: 0.72, C: 0.61, E: 0.80, A: 0.75, N: 0.28 },
+      behavioral_tags: ['uses_humour_often', 'warm_and_caring_tone', 'verbally_affectionate'],
+    }
+  }
+  return post('/onboard/questionnaire', data)
+}
+
+export async function submitPhrases(data: {
+  client_id: string
+  phrases: string[]
+}): Promise<{ status: string; phrase_count: number }> {
+  if (DEMO_MODE) {
+    await delay()
+    return { status: 'ok', phrase_count: data.phrases.length }
+  }
+  return post('/onboard/phrases', data)
+}
+
+export async function submitMemories(data: {
+  client_id: string
+  memories: { text: string; source: string; memory_type: string }[]
+}): Promise<{ status: string; memories_added: number }> {
+  if (DEMO_MODE) {
+    await delay()
+    return { status: 'ok', memories_added: data.memories.length }
+  }
+  return post('/onboard/memories', data)
+}
+
+export async function buildPersonality(clientId: string): Promise<{ status: string }> {
+  if (DEMO_MODE) {
+    await delay(900)
+    return { status: 'ok' }
+  }
+  return post(`/onboard/build-personality?client_id=${clientId}`, {})
+}
+
+// ─── Session ─────────────────────────────────────────────────────────────────
+
+export interface SessionResponse {
+  session_id: string
+  client_name: string
+  message: string
+}
+
+export async function startSession(data: {
+  client_id: string
+  family_member_name?: string
+}): Promise<SessionResponse> {
+  if (DEMO_MODE) {
+    await delay()
+    return {
+      session_id: 'demo-session-00000000-0000-0000-0000-000000000002',
+      client_name: localStorage.getItem('echo_persona_name') || 'Maria Müller',
+      message: 'Demo-Sitzung gestartet.',
+    }
+  }
+  return post('/session/start', data)
+}
+
+const DEMO_RESPONSES = [
+  'Schön, dass du dich meldest, mein Schatz. Wie geht es dir heute?',
+  'Ich denke oft an uns — weißt du noch, damals auf Rügen? Das waren wirklich wunderschöne Tage.',
+  'Mach dir keine Sorgen. Du schaffst das. Ich war immer stolz auf dich, und das werde ich immer sein.',
+  'Na, wie läuft\'s? Erzähl mir — ich höre dir zu.',
+  'Das klingt schwer. Ich wünschte, ich könnte einfach da sitzen und deine Hand halten.',
+  'Ich liebe dich. Das weißt du, oder? Das hat sich nie geändert.',
+]
+let _demoResponseIdx = 0
+
+export async function textChat(data: {
+  session_id: string
+  message: string
+}): Promise<{ response: string }> {
+  if (DEMO_MODE) {
+    await delay(1200)
+    const response = DEMO_RESPONSES[_demoResponseIdx % DEMO_RESPONSES.length]
+    _demoResponseIdx++
+    return { response }
+  }
+  return post('/session/text-chat', data)
+}
+
+export async function endSession(sessionId: string): Promise<void> {
+  if (DEMO_MODE) { await delay(200); return }
+  await fetch(`${BASE}/session/${sessionId}`, { method: 'DELETE' })
+}
+
+// ─── WebSocket voice session ──────────────────────────────────────────────────
+
+export function openVoiceSocket(_sessionId: string): WebSocket {
+  if (DEMO_MODE) {
+    // Return a stub WebSocket that never errors — voice mode just won't produce audio
+    return new WebSocket(`ws://${location.host}/demo-noop`)
+  }
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  return new WebSocket(`${proto}://${location.host}/session/voice/${_sessionId}`)
+}

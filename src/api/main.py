@@ -1,0 +1,315 @@
+"""
+Backend Engineer — FastAPI Application Entry Point
+Wires together all routes and starts the async application.
+"""
+import base64
+import uuid
+from contextlib import asynccontextmanager
+from typing import Dict, Optional
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from loguru import logger
+from pydantic import BaseModel
+
+from config.settings import settings
+from src.agent.conversation import ConversationAgent, ClientProfile
+from src.agent.personality import render_system_prompt
+from src.agent.voice_clone import VoiceCloneManager
+from src.data.database import init_db, get_db, Client, QuestionnaireResponse
+from src.questionnaire.scorer import process_questionnaire
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
+
+# ─── Active sessions (in-memory, keyed by session_id) ───────────────────────
+active_sessions: Dict[str, ConversationAgent] = {}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("ECHO Voice API starting...")
+    await init_db()
+    logger.success("Database initialised")
+    yield
+    logger.info("ECHO Voice API shutting down")
+
+
+app = FastAPI(
+    title="ECHO Voice API",
+    version=settings.APP_VERSION,
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ─── Request / Response models ────────────────────────────────────────────────
+
+class ConsentRequest(BaseModel):
+    client_name: str
+    email: str
+    language: str = "de"
+    consented: bool
+
+class QuestionnaireSubmission(BaseModel):
+    client_id: str
+    answers: Dict[str, int]   # {question_id: 1-5}
+
+class PhraseSubmission(BaseModel):
+    client_id: str
+    phrases: list[str]
+
+class MemorySubmission(BaseModel):
+    client_id: str
+    memories: list[dict]      # [{text, source, memory_type}]
+
+class StartSessionRequest(BaseModel):
+    client_id: str
+    family_member_name: Optional[str] = None
+
+class TextChatRequest(BaseModel):
+    session_id: str
+    message: str
+
+
+# ─── Onboarding routes ────────────────────────────────────────────────────────
+
+@app.post("/onboard/consent", status_code=status.HTTP_201_CREATED)
+async def register_client_with_consent(
+    req: ConsentRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Step 1 of onboarding: record consent and create client record.
+    GDPR: consent is mandatory — no data is collected without this.
+    """
+    if not req.consented:
+        raise HTTPException(status_code=400, detail="Consent is required to proceed.")
+
+    from datetime import datetime
+    client = Client(
+        full_name=req.client_name,
+        email=req.email,
+        language=req.language,
+        consent_given=True,
+        consent_timestamp=datetime.utcnow(),
+    )
+    db.add(client)
+    await db.commit()
+    await db.refresh(client)
+
+    logger.info(f"New client registered: {client.id} ({client.full_name})")
+    return {"client_id": str(client.id), "message": "Consent recorded. Welcome to ECHO Voice."}
+
+
+@app.post("/onboard/questionnaire")
+async def submit_questionnaire(
+    req: QuestionnaireSubmission,
+    db: AsyncSession = Depends(get_db),
+):
+    """Step 2: process personality questionnaire and store OCEAN scores."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(req.client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    personality = process_questionnaire(req.answers)
+
+    q = QuestionnaireResponse(
+        client_id=client.id,
+        answers=req.answers,
+        ocean_scores=personality["ocean_scores"],
+        behavioral_tags=personality["behavioral_tags"],
+    )
+    db.add(q)
+
+    client.personality_scores = personality
+    await db.commit()
+
+    logger.info(f"Questionnaire stored for {client.id}. OCEAN: {personality['ocean_scores']}")
+    return {
+        "status": "ok",
+        "ocean_scores": personality["ocean_scores"],
+        "behavioral_tags": personality["behavioral_tags"],
+    }
+
+
+@app.post("/onboard/phrases")
+async def submit_phrases(
+    req: PhraseSubmission,
+    db: AsyncSession = Depends(get_db),
+):
+    """Step 3: store the client's personal phrase bank."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(req.client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    client.phrase_bank = req.phrases
+    await db.commit()
+    logger.info(f"Phrase bank saved for {client.id}: {len(req.phrases)} phrases")
+    return {"status": "ok", "phrase_count": len(req.phrases)}
+
+
+@app.post("/onboard/memories")
+async def add_memories(req: MemorySubmission):
+    """Step 4: add personal memories to the vector store."""
+    from src.agent.memory_rag import MemoryStore
+    store = MemoryStore(req.client_id)
+    ids = store.add_memories_bulk(req.memories)
+    logger.info(f"Added {len(ids)} memories for client {req.client_id}")
+    return {"status": "ok", "memories_added": len(ids)}
+
+
+@app.post("/onboard/build-personality")
+async def build_personality_prompt(
+    client_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Final step: render and store the personality system prompt from all collected data."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    if not client.personality_scores:
+        raise HTTPException(status_code=400, detail="Questionnaire not yet completed")
+
+    prompt = render_system_prompt(
+        client_name=client.full_name,
+        ocean_scores=client.personality_scores["ocean_scores"],
+        behavioral_tags=client.personality_scores["behavioral_tags"],
+        phrase_bank=client.phrase_bank or [],
+        language=client.language,
+    )
+    client.personality_prompt = prompt
+    client.onboarding_complete = True
+    await db.commit()
+
+    logger.success(f"Personality prompt built for {client.id}")
+    return {"status": "ok", "prompt_length": len(prompt)}
+
+
+# ─── Interaction routes ───────────────────────────────────────────────────────
+
+@app.post("/session/start")
+async def start_session(
+    req: StartSessionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new conversation session for a family member."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(req.client_id)))
+    client = result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    if not client.onboarding_complete:
+        raise HTTPException(status_code=400, detail="Client onboarding is not complete")
+    if not client.elevenlabs_voice_id:
+        raise HTTPException(status_code=400, detail="Voice clone not yet created")
+
+    profile = ClientProfile(
+        client_id=str(client.id),
+        client_name=client.full_name,
+        elevenlabs_voice_id=client.elevenlabs_voice_id,
+        personality_prompt=client.personality_prompt,
+        language=client.language,
+    )
+
+    session_id = str(uuid.uuid4())
+    active_sessions[session_id] = ConversationAgent(profile)
+
+    logger.info(f"Session {session_id} started for client {client.id}")
+    return {
+        "session_id": session_id,
+        "client_name": client.full_name,
+        "message": f"Session started. You are now connected to {client.full_name}.",
+    }
+
+
+@app.post("/session/text-chat")
+async def text_chat(req: TextChatRequest):
+    """Text-only chat (no audio). Useful for testing and accessibility."""
+    agent = active_sessions.get(req.session_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Session not found or expired")
+
+    response = await agent.generate_text_response(req.message)
+    return {"response": response}
+
+
+@app.websocket("/session/voice/{session_id}")
+async def voice_session(websocket: WebSocket, session_id: str):
+    """
+    WebSocket voice session.
+    Client sends: base64-encoded audio chunks (WebM/Opus from browser microphone)
+    Server sends: base64-encoded MP3 audio (agent's voice response)
+    """
+    await websocket.accept()
+    agent = active_sessions.get(session_id)
+
+    if not agent:
+        await websocket.send_json({"error": "Session not found"})
+        await websocket.close()
+        return
+
+    logger.info(f"WebSocket voice session opened: {session_id}")
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            audio_b64 = data.get("audio")
+
+            if not audio_b64:
+                continue
+
+            audio_bytes = base64.b64decode(audio_b64)
+            response_audio = await agent.process_audio_turn(audio_bytes)
+
+            if response_audio:
+                await websocket.send_json({
+                    "audio": base64.b64encode(response_audio).decode(),
+                    "type": "audio_response",
+                })
+
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket session {session_id} disconnected")
+        active_sessions.pop(session_id, None)
+
+
+@app.delete("/session/{session_id}")
+async def end_session(session_id: str):
+    """Cleanly end a session."""
+    active_sessions.pop(session_id, None)
+    return {"status": "session ended"}
+
+
+# ─── Admin routes ─────────────────────────────────────────────────────────────
+
+@app.get("/admin/clients")
+async def list_clients(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Client))
+    clients = result.scalars().all()
+    return [
+        {
+            "id": str(c.id),
+            "name": c.full_name,
+            "onboarding_complete": c.onboarding_complete,
+            "has_voice_clone": bool(c.elevenlabs_voice_id),
+        }
+        for c in clients
+    ]
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "version": settings.APP_VERSION}
