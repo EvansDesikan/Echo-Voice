@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Mic, Square, Play, CheckCircle, ChevronRight, Loader2 } from 'lucide-react'
+import { Mic, Square, Play, CheckCircle, ChevronRight, Loader2, Upload } from 'lucide-react'
 import OnboardingLayout from '../../components/OnboardingLayout'
 import { useLang } from '../../context/LanguageContext'
 import { uploadVoiceRecording, createVoiceClone } from '../../api/client'
@@ -13,6 +13,8 @@ interface Recording {
   type: 'scripted' | 'spontaneous'
   label: string
   duration: number
+  uploaded: boolean
+  index: number
 }
 
 export default function VoiceEnrollmentPage() {
@@ -49,16 +51,28 @@ export default function VoiceEnrollmentPage() {
       stream.getTracks().forEach((t) => t.stop())
       const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
       const url = URL.createObjectURL(blob)
-      setRecordings((prev) => [
-        ...prev,
-        {
+      const clientId = localStorage.getItem('echo_client_id') ?? ''
+      setRecordings((prev) => {
+        const index = prev.length
+        const newRecording: Recording = {
           blob,
           url,
           type: phase,
           label: currentPrompt.slice(0, 50) + '…',
           duration: elapsed,
-        },
-      ])
+          uploaded: false,
+          index,
+        }
+        // Fire-and-forget upload immediately — mark as uploaded on success
+        uploadVoiceRecording(clientId, blob, phase, index)
+          .then(() => {
+            setRecordings((rs) =>
+              rs.map((r) => (r.index === index ? { ...r, uploaded: true } : r))
+            )
+          })
+          .catch((err) => console.error(`Upload failed for recording ${index}:`, err))
+        return [...prev, newRecording]
+      })
       setState('done')
     }
 
@@ -74,7 +88,11 @@ export default function VoiceEnrollmentPage() {
   }
 
   function redoRecording() {
-    setRecordings((prev) => prev.slice(0, -1))
+    setRecordings((prev) => {
+      const removed = prev[prev.length - 1]
+      if (removed?.url) URL.revokeObjectURL(removed.url)
+      return prev.slice(0, -1)
+    })
     setState('idle')
   }
 
@@ -103,9 +121,11 @@ export default function VoiceEnrollmentPage() {
     setUploading(true)
     setUploadPhase('uploading')
     try {
-      for (let i = 0; i < recordings.length; i++) {
+      // Only upload recordings that failed to auto-upload
+      const pending = recordings.filter((r) => !r.uploaded)
+      for (let i = 0; i < pending.length; i++) {
         setUploadProgress(i + 1)
-        await uploadVoiceRecording(clientId, recordings[i].blob, recordings[i].type, i)
+        await uploadVoiceRecording(clientId, pending[i].blob, pending[i].type, pending[i].index)
       }
       setUploadPhase('cloning')
       await createVoiceClone(clientId)
@@ -296,7 +316,10 @@ export default function VoiceEnrollmentPage() {
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0 }}>
                   {formatTime(r.duration)}
                 </span>
-                <CheckCircle size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />
+                {r.uploaded
+                  ? <CheckCircle size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />
+                  : <Upload size={14} style={{ color: 'var(--text-muted)', flexShrink: 0, opacity: 0.6 }} />
+                }
               </div>
             ))}
           </div>
