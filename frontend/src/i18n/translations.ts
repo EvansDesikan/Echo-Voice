@@ -91,9 +91,22 @@ const t = {
     voice_btn_next: 'Nächster Text',
     voice_btn_continue: 'Weiter zum Fragebogen →',
     voice_btn_min: 'Bitte schließen Sie mindestens 3 Aufnahmen ab.',
+    voice_btn_redo: 'Neu aufnehmen',
     voice_uploading: (n: number, m: number) => `Aufnahme ${n} von ${m} wird hochgeladen…`,
     voice_creating_clone: 'Sprachklon wird erstellt…',
     voice_upload_done: 'Fertig!',
+    voice_scripted_notes: [
+      'Lesen Sie diesen Begrüßungstext laut vor — freundlich und warm, genau wie Sie jemanden im Alltag wirklich begrüßen würden.',
+      'Lesen Sie diesen Text vor und stellen Sie sich die Situation wirklich vor — das gibt Ihrer Stimme Wärme und Natürlichkeit.',
+      'Lesen Sie diese tröstenden Worte so vor, als würden Sie sie jemandem sagen, dem Sie wirklich helfen möchten. Nehmen Sie sich Zeit.',
+      'Lesen Sie diesen Text vor — denken Sie dabei ruhig an einen echten Erinnerungsmoment. Das gibt der Aufnahme Leben und Tiefe.',
+      'Lesen Sie diese Worte mit echtem Gefühl vor — genauso, wie Sie sie einem geliebten Menschen wirklich sagen würden.',
+    ],
+    voice_spontaneous_topics_notes: [
+      'Kein Skript — sprechen Sie einfach frei. Denken Sie an einen konkreten Urlaub: Orte, Momente, Gerüche, mit wem Sie dabei waren. 2–3 Minuten sind ideal.',
+      'Sprechen Sie über echte Personen und konkrete Momente — je persönlicher und detaillierter, desto echter klingt ECHO Voice später für Ihre Familie.',
+      'Erzählen Sie von Ihrem echten Alltag — Rituale, kleine Gewohnheiten, wer dabei ist. Gerade diese Details machen den Unterschied.',
+    ],
 
     // Quiz
     quiz_title: 'Persönlichkeitsfragebogen',
@@ -306,9 +319,22 @@ const t = {
     voice_btn_next: 'Next prompt',
     voice_btn_continue: 'Continue to questionnaire →',
     voice_btn_min: 'Please complete at least 3 recordings.',
+    voice_btn_redo: 'Re-record',
     voice_uploading: (n: number, m: number) => `Uploading recording ${n} of ${m}…`,
     voice_creating_clone: 'Creating voice clone…',
     voice_upload_done: 'Done!',
+    voice_scripted_notes: [
+      'Read this greeting aloud — warm and friendly, exactly as you would greet someone in everyday life.',
+      'Read this text and picture the scene in your mind as you do — it will bring natural warmth to your voice.',
+      'Read these comforting words as if you were saying them to someone you truly care about. Take your time.',
+      'Read this text — think of a real memory as you speak. It will bring the recording to life.',
+      'Read these words with genuine feeling — just as you would truly say them to someone you love.',
+    ],
+    voice_spontaneous_topics_notes: [
+      'No script — just speak freely. Think of a specific trip: the places, moments, smells, who was with you. 2–3 minutes is ideal.',
+      'Talk about real people and specific moments — the more personal and detailed, the more authentic ECHO Voice will sound to your family.',
+      'Talk about your real daily life — routines, small habits, who is around. These details are exactly what makes it feel truly like you.',
+    ],
 
     // Quiz
     quiz_title: 'Personality questionnaire',

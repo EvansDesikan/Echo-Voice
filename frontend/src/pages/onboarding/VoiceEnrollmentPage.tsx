@@ -31,7 +31,9 @@ export default function VoiceEnrollmentPage() {
   const chunksRef = useRef<Blob[]>([])
 
   const prompts = phase === 'scripted' ? T.voice_scripted_prompts : T.voice_spontaneous_topics
+  const notes = phase === 'scripted' ? T.voice_scripted_notes : T.voice_spontaneous_topics_notes
   const currentPrompt = prompts[currentPromptIndex]
+  const currentNote = notes[currentPromptIndex]
   const totalDuration = recordings.reduce((acc, r) => acc + r.duration, 0)
   const targetSeconds = 15 * 60 // 15 minutes
   const progressPct = Math.min((totalDuration / targetSeconds) * 100, 100)
@@ -69,6 +71,11 @@ export default function VoiceEnrollmentPage() {
   function stopRecording() {
     if (timerRef.current) clearInterval(timerRef.current)
     mediaRecorder.current?.stop()
+  }
+
+  function redoRecording() {
+    setRecordings((prev) => prev.slice(0, -1))
+    setState('idle')
   }
 
   function nextPrompt() {
@@ -163,13 +170,27 @@ export default function VoiceEnrollmentPage() {
           lineHeight: 1.7,
           color: 'var(--text)',
           fontFamily: 'var(--font-display)',
-          marginBottom: 28,
+          marginBottom: 12,
           padding: '16px 20px',
           background: 'var(--bg-subtle)',
           borderRadius: 'var(--radius)',
           borderLeft: '3px solid var(--primary)',
         }}>
           {currentPrompt}
+        </p>
+
+        <p style={{
+          fontSize: '0.78rem',
+          lineHeight: 1.6,
+          color: 'var(--text-muted)',
+          marginBottom: 24,
+          padding: '8px 12px',
+          background: 'var(--bg-card)',
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--border-light)',
+        }}>
+          <strong style={{ color: 'var(--primary)', fontWeight: 600 }}>HINWEIS: </strong>
+          {currentNote}
         </p>
 
         {/* Controls */}
@@ -226,11 +247,20 @@ export default function VoiceEnrollmentPage() {
                   style={{ width: '100%', height: 36 }}
                 />
               )}
-              {!allDone && (
-                <button className="btn btn--primary" onClick={nextPrompt} style={{ marginTop: 4 }}>
-                  {T.voice_btn_next} <ChevronRight size={16} />
+              <div style={{ display: 'flex', gap: 10, marginTop: 4, width: '100%' }}>
+                <button
+                  className="btn btn--secondary"
+                  onClick={redoRecording}
+                  style={{ flex: 1 }}
+                >
+                  {T.voice_btn_redo}
                 </button>
-              )}
+                {!allDone && (
+                  <button className="btn btn--primary" onClick={nextPrompt} style={{ flex: 2 }}>
+                    {T.voice_btn_next} <ChevronRight size={16} />
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
