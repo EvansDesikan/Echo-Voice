@@ -352,7 +352,7 @@ export default function VoiceEnrollmentPage() {
       <button
         className="btn btn--primary btn--full btn--lg"
         onClick={handleContinue}
-        disabled={totalDuration < 600 || uploading}
+        disabled={totalDuration < 30 || uploading}
       >
         {uploading && <Loader2 size={16} style={{ marginRight: 8, animation: 'spin 1s linear infinite' }} />}
         {uploadPhase === 'uploading'
@@ -363,7 +363,7 @@ export default function VoiceEnrollmentPage() {
           ? T.voice_upload_done
           : T.voice_btn_continue}
       </button>
-      {totalDuration < 600 && (
+      {totalDuration < 30 && (
         <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: 8 }}>
           {T.voice_btn_min}
         </p>
