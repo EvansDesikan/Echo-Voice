@@ -91,6 +91,9 @@ const t = {
     voice_btn_next: 'Nächster Text',
     voice_btn_continue: 'Weiter zum Fragebogen →',
     voice_btn_min: 'Bitte schließen Sie mindestens 3 Aufnahmen ab.',
+    voice_uploading: (n: number, m: number) => `Aufnahme ${n} von ${m} wird hochgeladen…`,
+    voice_creating_clone: 'Sprachklon wird erstellt…',
+    voice_upload_done: 'Fertig!',
 
     // Quiz
     quiz_title: 'Persönlichkeitsfragebogen',
@@ -303,6 +306,9 @@ const t = {
     voice_btn_next: 'Next prompt',
     voice_btn_continue: 'Continue to questionnaire →',
     voice_btn_min: 'Please complete at least 3 recordings.',
+    voice_uploading: (n: number, m: number) => `Uploading recording ${n} of ${m}…`,
+    voice_creating_clone: 'Creating voice clone…',
+    voice_upload_done: 'Done!',
 
     // Quiz
     quiz_title: 'Personality questionnaire',

@@ -7,7 +7,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Dict, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -17,8 +17,9 @@ from config.settings import settings
 from src.agent.conversation import ConversationAgent, ClientProfile
 from src.agent.personality import render_system_prompt
 from src.agent.voice_clone import VoiceCloneManager
-from src.data.database import init_db, get_db, Client, QuestionnaireResponse
+from src.data.database import init_db, get_db, Client, QuestionnaireResponse, VoiceRecording
 from src.questionnaire.scorer import process_questionnaire
+from src.voice.enrollment import VoiceEnrollmentManager
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -45,7 +46,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "https://echo-voice-liard.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -168,6 +169,86 @@ async def add_memories(req: MemorySubmission):
     ids = store.add_memories_bulk(req.memories)
     logger.info(f"Added {len(ids)} memories for client {req.client_id}")
     return {"status": "ok", "memories_added": len(ids)}
+
+
+@app.post("/onboard/voice-upload", status_code=status.HTTP_201_CREATED)
+async def upload_voice_recording(
+    client_id: str = Form(...),
+    recording_type: str = Form(...),
+    index: int = Form(0),
+    audio: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a voice recording blob to Cloudflare R2 and persist metadata to Postgres."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    audio_bytes = await audio.read()
+    enrollment = VoiceEnrollmentManager()
+    object_key, duration = await enrollment.upload_recording(
+        client_id=client_id,
+        audio_bytes=audio_bytes,
+        recording_type=recording_type,
+        index=index,
+    )
+
+    recording = VoiceRecording(
+        client_id=client.id,
+        minio_object_key=object_key,
+        duration_seconds=duration,
+        recording_type=recording_type,
+    )
+    db.add(recording)
+    await db.commit()
+
+    logger.info(f"Voice recording saved: {object_key} ({duration:.1f}s) for client {client_id}")
+    return {"object_key": object_key, "duration_seconds": duration}
+
+
+@app.post("/onboard/create-voice-clone")
+async def create_voice_clone(
+    client_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Download all client recordings from R2, create ElevenLabs voice clone, store voice_id."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    recordings_result = await db.execute(
+        select(VoiceRecording).where(VoiceRecording.client_id == client.id)
+    )
+    recordings = recordings_result.scalars().all()
+    if not recordings:
+        raise HTTPException(status_code=400, detail="No recordings found for this client")
+
+    enrollment = VoiceEnrollmentManager()
+    temp_paths = []
+    try:
+        for rec in recordings:
+            path = await enrollment.download_to_tempfile(rec.minio_object_key)
+            temp_paths.append(path)
+
+        voice_manager = VoiceCloneManager()
+        voice_id = await voice_manager.create_voice_clone(
+            client_name=client.full_name,
+            audio_file_paths=temp_paths,
+        )
+    finally:
+        for p in temp_paths:
+            try:
+                p.unlink()
+            except Exception:
+                pass
+
+    client.elevenlabs_voice_id = voice_id
+    await db.commit()
+
+    logger.success(f"Voice clone created for {client.id}: {voice_id}")
+    return {"voice_id": voice_id}
 
 
 @app.post("/onboard/build-personality")

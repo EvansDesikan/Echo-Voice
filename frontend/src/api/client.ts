@@ -147,6 +147,37 @@ export async function textChat(data: {
   return post('/session/text-chat', data)
 }
 
+export async function uploadVoiceRecording(
+  clientId: string,
+  audioBlob: Blob,
+  recordingType: 'scripted' | 'spontaneous',
+  index: number,
+): Promise<{ object_key: string; duration_seconds: number }> {
+  if (DEMO_MODE) {
+    await delay(400)
+    return { object_key: `demo/${clientId}/${recordingType}/${index}.webm`, duration_seconds: 30 }
+  }
+  const form = new FormData()
+  form.append('client_id', clientId)
+  form.append('recording_type', recordingType)
+  form.append('index', String(index))
+  form.append('audio', audioBlob, `recording_${index}.webm`)
+  const res = await fetch(`${BASE}/onboard/voice-upload`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Upload failed' }))
+    throw new Error(err.detail || 'Upload failed')
+  }
+  return res.json()
+}
+
+export async function createVoiceClone(clientId: string): Promise<{ voice_id: string }> {
+  if (DEMO_MODE) {
+    await delay(1500)
+    return { voice_id: 'demo-voice-id-00000000' }
+  }
+  return post(`/onboard/create-voice-clone?client_id=${clientId}`, {})
+}
+
 export async function endSession(sessionId: string): Promise<void> {
   if (DEMO_MODE) { await delay(200); return }
   await fetch(`${BASE}/session/${sessionId}`, { method: 'DELETE' })

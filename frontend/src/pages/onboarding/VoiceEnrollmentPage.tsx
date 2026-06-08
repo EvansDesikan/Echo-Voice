@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Mic, Square, Play, CheckCircle, ChevronRight } from 'lucide-react'
+import { Mic, Square, Play, CheckCircle, ChevronRight, Loader2 } from 'lucide-react'
 import OnboardingLayout from '../../components/OnboardingLayout'
 import { useLang } from '../../context/LanguageContext'
+import { uploadVoiceRecording, createVoiceClone } from '../../api/client'
 
 type RecordingState = 'idle' | 'recording' | 'done'
 
@@ -22,6 +23,9 @@ export default function VoiceEnrollmentPage() {
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0)
   const [phase, setPhase] = useState<'scripted' | 'spontaneous'>('scripted')
   const [elapsed, setElapsed] = useState(0)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadPhase, setUploadPhase] = useState<'uploading' | 'cloning' | 'done' | null>(null)
   const mediaRecorder = useRef<MediaRecorder | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -86,6 +90,26 @@ export default function VoiceEnrollmentPage() {
   }
 
   const allDone = phase === 'spontaneous' && currentPromptIndex === T.voice_spontaneous_topics.length - 1 && state === 'done'
+
+  async function handleContinue() {
+    const clientId = localStorage.getItem('echo_client_id') ?? ''
+    setUploading(true)
+    setUploadPhase('uploading')
+    try {
+      for (let i = 0; i < recordings.length; i++) {
+        setUploadProgress(i + 1)
+        await uploadVoiceRecording(clientId, recordings[i].blob, recordings[i].type, i)
+      }
+      setUploadPhase('cloning')
+      await createVoiceClone(clientId)
+      setUploadPhase('done')
+      navigate('/onboarding/quiz')
+    } catch (err) {
+      console.error('Voice upload failed:', err)
+      setUploading(false)
+      setUploadPhase(null)
+    }
+  }
 
   return (
     <OnboardingLayout currentStep={1}>
@@ -251,10 +275,17 @@ export default function VoiceEnrollmentPage() {
 
       <button
         className="btn btn--primary btn--full btn--lg"
-        onClick={() => navigate('/onboarding/quiz')}
-        disabled={recordings.length < 3}
+        onClick={handleContinue}
+        disabled={recordings.length < 3 || uploading}
       >
-        {T.voice_btn_continue}
+        {uploading && <Loader2 size={16} style={{ marginRight: 8, animation: 'spin 1s linear infinite' }} />}
+        {uploadPhase === 'uploading'
+          ? T.voice_uploading(uploadProgress, recordings.length)
+          : uploadPhase === 'cloning'
+          ? T.voice_creating_clone
+          : uploadPhase === 'done'
+          ? T.voice_upload_done
+          : T.voice_btn_continue}
       </button>
       {recordings.length < 3 && (
         <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: 8 }}>
