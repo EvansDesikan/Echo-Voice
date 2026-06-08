@@ -12,6 +12,7 @@ import MemoriesPage from './pages/onboarding/MemoriesPage'
 import OnboardingCompletePage from './pages/onboarding/OnboardingCompletePage'
 import SessionStartPage from './pages/family/SessionStartPage'
 import VoiceChatPage from './pages/family/VoiceChatPage'
+import LoginPage from './pages/LoginPage'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Routes>
           {/* Public landing */}
           <Route path="/" element={<><Nav /><LandingPage /></>} />
+          <Route path="/login" element={<LoginPage />} />
 
           {/* Client onboarding flow */}
           <Route path="/onboarding/consent"    element={<ConsentPage />} />

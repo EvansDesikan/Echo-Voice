@@ -34,6 +34,32 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json()
 }
 
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+export interface LoginResponse {
+  client_id: string
+  client_name: string
+  onboarding_complete: boolean
+  has_voice_clone: boolean
+  has_personality: boolean
+  has_phrases: boolean
+}
+
+export async function login(email: string): Promise<LoginResponse> {
+  if (DEMO_MODE) {
+    await delay()
+    return {
+      client_id: 'demo-client-00000000-0000-0000-0000-000000000001',
+      client_name: 'Maria Müller',
+      onboarding_complete: true,
+      has_voice_clone: true,
+      has_personality: true,
+      has_phrases: true,
+    }
+  }
+  return post('/auth/login', { email })
+}
+
 // ─── Onboarding ──────────────────────────────────────────────────────────────
 
 export interface ConsentResponse {

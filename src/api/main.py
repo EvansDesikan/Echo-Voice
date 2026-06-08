@@ -288,6 +288,33 @@ async def build_personality_prompt(
     return {"status": "ok", "prompt_length": len(prompt)}
 
 
+# ─── Auth routes ─────────────────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    email: str
+
+@app.post("/auth/login")
+async def login(
+    req: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Look up an existing client by email and return their profile state."""
+    result = await db.execute(select(Client).where(Client.email == req.email))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="No account found with this email address.")
+
+    logger.info(f"Login: {client.id} ({client.email})")
+    return {
+        "client_id": str(client.id),
+        "client_name": client.full_name,
+        "onboarding_complete": client.onboarding_complete,
+        "has_voice_clone": bool(client.elevenlabs_voice_id),
+        "has_personality": bool(client.personality_scores),
+        "has_phrases": bool(client.phrase_bank),
+    }
+
+
 # ─── Interaction routes ───────────────────────────────────────────────────────
 
 @app.post("/session/start")

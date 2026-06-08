@@ -15,6 +15,7 @@ export default function LandingPage() {
             <p className="hero__subtitle">{T.land_subtitle}</p>
             <div className="hero__cta">
               <Link to="/onboarding/consent" className="btn btn--primary btn--lg">{T.land_cta_primary}</Link>
+              <Link to="/login" className="btn btn--secondary btn--lg">{T.land_cta_login}</Link>
               <Link to="/family" className="btn btn--ghost btn--lg">{T.land_cta_family}</Link>
             </div>
           </div>

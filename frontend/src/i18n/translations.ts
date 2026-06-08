@@ -12,6 +12,7 @@ const t = {
     land_headline: 'Eine Stimme, die bleibt.',
     land_subtitle: 'ECHO Voice bewahrt die Stimme und Persönlichkeit Ihrer Liebsten — damit die Menschen, die sie hinterlassen, noch mit ihnen sprechen können.',
     land_cta_primary: 'Mein Profil erstellen',
+    land_cta_login: 'Bereits registriert? Anmelden',
     land_cta_family: 'Für Angehörige',
     land_how_title: 'Wie ECHO Voice entsteht',
     land_how_subtitle: 'In vier Schritten schaffen Sie ein lebendiges Erinnerungsstück für Ihre Familie.',
@@ -183,6 +184,18 @@ const t = {
     complete_back: 'Zurück zur Startseite',
     complete_disclaimer: 'ECHO Voice ist ein KI-gestützter Gedenkdienst. Ihre Angehörigen werden stets darüber informiert, dass sie mit einer KI sprechen, die auf Ihrem Profil basiert.',
 
+    // Login
+    login_title: 'Willkommen zurück',
+    login_subtitle: 'Geben Sie Ihre E-Mail-Adresse ein, um Ihr ECHO Voice Profil fortzusetzen oder aufzurufen.',
+    login_email_label: 'E-Mail-Adresse',
+    login_email_placeholder: 'name@beispiel.de',
+    login_btn: 'Anmelden',
+    login_btn_loading: 'Wird gesucht…',
+    login_err_not_found: 'Kein Konto mit dieser E-Mail-Adresse gefunden.',
+    login_err_failed: 'Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.',
+    login_no_account: 'Noch kein Profil?',
+    login_signup_link: 'Jetzt erstellen',
+
     // Session start
     session_title: 'Gespräch beginnen',
     session_subtitle: 'Geben Sie den Zugangscode ein, den Sie erhalten haben, um eine Konversation zu starten.',
@@ -240,6 +253,7 @@ const t = {
     land_headline: 'A voice that endures.',
     land_subtitle: 'ECHO Voice preserves the voice and personality of your loved ones — so the people they leave behind can still speak with them.',
     land_cta_primary: 'Create my profile',
+    land_cta_login: 'Already registered? Log in',
     land_cta_family: 'For family',
     land_how_title: 'How ECHO Voice is built',
     land_how_subtitle: 'Four steps to create a living memorial for your family.',
@@ -410,6 +424,18 @@ const t = {
     complete_gift: 'What you have just done is an extraordinary gift to your family.',
     complete_back: 'Back to home',
     complete_disclaimer: 'ECHO Voice is an AI-powered memorial service. Your relatives will always be informed that they are speaking with an AI based on your profile.',
+
+    // Login
+    login_title: 'Welcome back',
+    login_subtitle: 'Enter your email address to continue or access your ECHO Voice profile.',
+    login_email_label: 'Email address',
+    login_email_placeholder: 'name@example.com',
+    login_btn: 'Log in',
+    login_btn_loading: 'Looking up…',
+    login_err_not_found: 'No account found with this email address.',
+    login_err_failed: 'Login failed. Please try again.',
+    login_no_account: 'No profile yet?',
+    login_signup_link: 'Create one now',
 
     // Session start
     session_title: 'Begin a conversation',
