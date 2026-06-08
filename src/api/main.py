@@ -487,6 +487,33 @@ async def end_session(session_id: str):
 
 # ─── Admin routes ─────────────────────────────────────────────────────────────
 
+@app.delete("/admin/clients/{client_id}/voice-clone")
+async def delete_voice_clone(
+    client_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Admin: delete the ElevenLabs voice clone for a client and clear voice_id from DB.
+    Use this to reset a poor-quality clone so the client can re-run create-voice-clone.
+    """
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    if not client.elevenlabs_voice_id:
+        raise HTTPException(status_code=400, detail="No voice clone exists for this client")
+
+    voice_manager = VoiceCloneManager()
+    deleted = await voice_manager.delete_voice(client.elevenlabs_voice_id)
+    old_voice_id = client.elevenlabs_voice_id
+    client.elevenlabs_voice_id = None
+    client.onboarding_complete = False
+    await db.commit()
+
+    logger.info(f"Admin: deleted voice clone {old_voice_id} for client {client_id}")
+    return {"status": "deleted", "voice_id": old_voice_id, "elevenlabs_deleted": deleted}
+
+
 @app.get("/admin/clients")
 async def list_clients(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Client))

@@ -390,6 +390,20 @@ export default function VoiceEnrollmentPage() {
         </div>
       )}
 
+      {totalDuration < 180 && recordings.length > 0 && (
+        <p style={{
+          fontSize: '0.8rem',
+          color: '#92400e',
+          background: '#fef3c7',
+          border: '1px solid #fcd34d',
+          borderRadius: 'var(--radius)',
+          padding: '10px 14px',
+          marginBottom: 12,
+          lineHeight: 1.5,
+        }}>
+          ⚠ {T.voice_quality_warning}
+        </p>
+      )}
       <button
         className="btn btn--primary btn--full btn--lg"
         onClick={handleContinue}
