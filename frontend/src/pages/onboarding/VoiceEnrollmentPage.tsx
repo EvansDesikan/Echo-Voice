@@ -371,7 +371,19 @@ export default function VoiceEnrollmentPage() {
                   }
                 </div>
                 {r.url && (
-                  <audio controls src={r.url} style={{ width: '100%', height: 32 }} />
+                  <audio
+                    controls
+                    src={r.url}
+                    style={{ width: '100%', height: 32 }}
+                    onLoadedMetadata={(e) => {
+                      const real = e.currentTarget.duration
+                      if (isFinite(real) && real > 0) {
+                        setRecordings((rs) =>
+                          rs.map((rec) => rec.index === r.index ? { ...rec, duration: real } : rec)
+                        )
+                      }
+                    }}
+                  />
                 )}
               </div>
             ))}
