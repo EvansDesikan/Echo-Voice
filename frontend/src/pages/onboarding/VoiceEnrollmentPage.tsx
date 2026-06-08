@@ -31,11 +31,20 @@ export default function VoiceEnrollmentPage() {
   const mediaRecorder = useRef<MediaRecorder | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  // Refs to capture live values inside MediaRecorder callbacks (avoids stale closures)
+  const elapsedRef = useRef(0)
+  const phaseRef = useRef<'scripted' | 'spontaneous'>('scripted')
+  const currentPromptRef = useRef('')
+  const nextRecordingIndexRef = useRef(0)
 
   const prompts = phase === 'scripted' ? T.voice_scripted_prompts : T.voice_spontaneous_topics
   const notes = phase === 'scripted' ? T.voice_scripted_notes : T.voice_spontaneous_topics_notes
   const currentPrompt = prompts[currentPromptIndex]
   const currentNote = notes[currentPromptIndex]
+
+  // Keep refs in sync so MediaRecorder callbacks always see live values
+  phaseRef.current = phase
+  currentPromptRef.current = currentPrompt
   const totalDuration = recordings.reduce((acc, r) => acc + r.duration, 0)
   const targetSeconds = 15 * 60 // 15 minutes
   const progressPct = Math.min((totalDuration / targetSeconds) * 100, 100)
@@ -52,34 +61,43 @@ export default function VoiceEnrollmentPage() {
       const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
       const url = URL.createObjectURL(blob)
       const clientId = localStorage.getItem('echo_client_id') ?? ''
-      setRecordings((prev) => {
-        const index = prev.length
-        const newRecording: Recording = {
-          blob,
-          url,
-          type: phase,
-          label: currentPrompt.slice(0, 50) + '…',
-          duration: elapsed,
-          uploaded: false,
-          index,
-        }
-        // Fire-and-forget upload immediately — mark as uploaded on success
-        uploadVoiceRecording(clientId, blob, phase, index)
-          .then(() => {
-            setRecordings((rs) =>
-              rs.map((r) => (r.index === index ? { ...r, uploaded: true } : r))
-            )
-          })
-          .catch((err) => console.error(`Upload failed for recording ${index}:`, err))
-        return [...prev, newRecording]
-      })
+      // Use refs — not state — to get live values at stop time (fixes stale closure)
+      const capturedDuration = elapsedRef.current
+      const capturedPhase = phaseRef.current
+      const capturedLabel = currentPromptRef.current.slice(0, 50) + '…'
+      // Use a stable monotonic index — not array.length — to avoid redo collisions
+      const index = nextRecordingIndexRef.current
+      nextRecordingIndexRef.current += 1
+
+      const newRecording: Recording = {
+        blob,
+        url,
+        type: capturedPhase,
+        label: capturedLabel,
+        duration: capturedDuration,
+        uploaded: false,
+        index,
+      }
+      setRecordings((prev) => [...prev, newRecording])
+      // Fire-and-forget upload immediately — mark as uploaded on success
+      uploadVoiceRecording(clientId, blob, capturedPhase, index)
+        .then(() => {
+          setRecordings((rs) =>
+            rs.map((r) => (r.index === index ? { ...r, uploaded: true } : r))
+          )
+        })
+        .catch((err) => console.error(`Upload failed for recording ${index}:`, err))
       setState('done')
     }
 
     mr.start(100)
     setState('recording')
+    elapsedRef.current = 0
     setElapsed(0)
-    timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000)
+    timerRef.current = setInterval(() => {
+      elapsedRef.current += 1
+      setElapsed(elapsedRef.current)
+    }, 1000)
   }
 
   function stopRecording() {
@@ -281,6 +299,11 @@ export default function VoiceEnrollmentPage() {
                   </button>
                 )}
               </div>
+              {allDone && (
+                <p style={{ fontSize: '0.82rem', color: 'var(--success)', textAlign: 'center', marginTop: 4, fontWeight: 500 }}>
+                  Alle Aufnahmen abgeschlossen — bitte drücken Sie unten auf „Weiter".
+                </p>
+              )}
             </div>
           )}
 

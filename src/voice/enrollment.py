@@ -8,10 +8,10 @@ Two types of recordings:
 import asyncio
 import hashlib
 import io
+import tempfile
 from pathlib import Path
 from typing import List, Tuple
 
-import aiofiles
 from loguru import logger
 from minio import Minio
 from minio.error import S3Error
@@ -63,7 +63,7 @@ SPONTANEOUS_TOPICS_EN = [
 
 
 class VoiceEnrollmentManager:
-    """Manages the upload pipeline for voice recordings to MinIO."""
+    """Manages the upload pipeline for voice recordings to Cloudflare R2 via MinIO SDK."""
 
     def __init__(self):
         self._minio = Minio(
@@ -72,12 +72,18 @@ class VoiceEnrollmentManager:
             secret_key=settings.MINIO_SECRET_KEY,
             secure=True,  # Cloudflare R2 requires HTTPS
         )
-        self._ensure_bucket()
 
-    def _ensure_bucket(self):
-        if not self._minio.bucket_exists(settings.MINIO_BUCKET):
-            self._minio.make_bucket(settings.MINIO_BUCKET)
-            logger.info(f"Created MinIO bucket: {settings.MINIO_BUCKET}")
+    async def _ensure_bucket(self) -> None:
+        """Check bucket exists; create if not. Runs in thread to avoid blocking event loop."""
+        loop = asyncio.get_event_loop()
+        exists = await loop.run_in_executor(
+            None, lambda: self._minio.bucket_exists(settings.MINIO_BUCKET)
+        )
+        if not exists:
+            await loop.run_in_executor(
+                None, lambda: self._minio.make_bucket(settings.MINIO_BUCKET)
+            )
+            logger.info(f"Created R2 bucket: {settings.MINIO_BUCKET}")
 
     async def upload_recording(
         self,
@@ -87,21 +93,26 @@ class VoiceEnrollmentManager:
         index: int = 0,
     ) -> Tuple[str, float]:
         """
-        Upload a recording to MinIO.
+        Upload a recording to Cloudflare R2.
+        All MinIO SDK calls run in a thread executor to avoid blocking the async event loop.
         Returns (object_key, duration_seconds).
         """
+        await self._ensure_bucket()
+
         checksum = hashlib.md5(audio_bytes).hexdigest()[:8]
         object_key = f"{client_id}/{recording_type}/{index:03d}_{checksum}.webm"
-
-        audio_stream = io.BytesIO(audio_bytes)
         length = len(audio_bytes)
 
-        self._minio.put_object(
-            settings.MINIO_BUCKET,
-            object_key,
-            data=audio_stream,
-            length=length,
-            content_type="audio/webm",
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: self._minio.put_object(
+                settings.MINIO_BUCKET,
+                object_key,
+                data=io.BytesIO(audio_bytes),
+                length=length,
+                content_type="audio/webm",
+            ),
         )
 
         # Rough duration estimate: WebM/Opus at ~40KB/s
@@ -120,16 +131,20 @@ class VoiceEnrollmentManager:
         return url
 
     async def download_to_tempfile(self, object_key: str) -> Path:
-        """Download a recording to a temp file (for Whisper/ElevenLabs processing)."""
-        import tempfile
-        response = self._minio.get_object(settings.MINIO_BUCKET, object_key)
-        suffix = Path(object_key).suffix
-        tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-        for chunk in response.stream(32 * 1024):
-            tmp.write(chunk)
-        tmp.close()
-        response.close()
-        return Path(tmp.name)
+        """Download a recording to a temp file. Runs in thread to avoid blocking event loop."""
+        loop = asyncio.get_event_loop()
+
+        def _download() -> Path:
+            response = self._minio.get_object(settings.MINIO_BUCKET, object_key)
+            suffix = Path(object_key).suffix
+            tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+            for chunk in response.stream(32 * 1024):
+                tmp.write(chunk)
+            tmp.close()
+            response.close()
+            return Path(tmp.name)
+
+        return await loop.run_in_executor(None, _download)
 
     def get_scripted_prompts(self, language: str = "de") -> List[str]:
         return SCRIPTED_PROMPTS_DE if language == "de" else SCRIPTED_PROMPTS_EN
