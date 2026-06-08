@@ -52,6 +52,7 @@ export interface ExistingRecording {
   duration_seconds: number
   recording_type: 'scripted' | 'spontaneous'
   uploaded_at: string
+  playback_url: string
 }
 
 export async function getVoiceRecordings(clientId: string): Promise<{ recordings: ExistingRecording[]; total_duration: number }> {

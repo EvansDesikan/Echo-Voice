@@ -231,7 +231,7 @@ async def get_voice_recordings(
     client_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """Return all voice recordings already uploaded for this client."""
+    """Return all voice recordings for this client, with presigned R2 URLs for playback."""
     result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
     client = result.scalar_one_or_none()
     if not client:
@@ -241,6 +241,7 @@ async def get_voice_recordings(
         select(VoiceRecording).where(VoiceRecording.client_id == client.id)
     )
     recs = recs_result.scalars().all()
+    enrollment = VoiceEnrollmentManager()
     return {
         "recordings": [
             {
@@ -249,6 +250,7 @@ async def get_voice_recordings(
                 "duration_seconds": r.duration_seconds,
                 "recording_type": r.recording_type,
                 "uploaded_at": r.uploaded_at.isoformat(),
+                "playback_url": enrollment.get_download_url(r.minio_object_key, expires_hours=1),
             }
             for i, r in enumerate(recs)
         ],

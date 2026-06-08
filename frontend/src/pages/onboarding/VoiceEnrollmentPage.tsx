@@ -45,7 +45,7 @@ export default function VoiceEnrollmentPage() {
       if (recordings.length === 0) return
       const restored: Recording[] = recordings.map((r) => ({
         blob: new Blob([], { type: 'audio/webm' }),  // placeholder — audio is already on R2
-        url: '',
+        url: r.playback_url,  // presigned R2 URL — valid for 1 hour
         type: r.recording_type,
         label: `Recording ${r.index + 1} (${r.recording_type})`,
         duration: r.duration_seconds,
