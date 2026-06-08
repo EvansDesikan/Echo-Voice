@@ -246,6 +246,28 @@ async def get_voice_recordings(
     )
     recs = recs_result.scalars().all()
     enrollment = VoiceEnrollmentManager()
+
+    # For recordings with no stored label (uploaded before the label column was added),
+    # reconstruct the prompt text from the ordered position within each recording type.
+    lang = client.language or "de"
+    scripted_prompts = enrollment.get_scripted_prompts(lang)
+    spontaneous_topics = enrollment.get_spontaneous_topics(lang)
+    scripted_counter = 0
+    spontaneous_counter = 0
+
+    def resolve_label(r: VoiceRecording) -> str:
+        nonlocal scripted_counter, spontaneous_counter
+        if r.label:
+            return r.label
+        if r.recording_type == "scripted":
+            idx = scripted_counter
+            scripted_counter += 1
+            return scripted_prompts[idx][:80] if idx < len(scripted_prompts) else f"Scripted {idx + 1}"
+        else:
+            idx = spontaneous_counter
+            spontaneous_counter += 1
+            return spontaneous_topics[idx][:80] if idx < len(spontaneous_topics) else f"Spontaneous {idx + 1}"
+
     return {
         "recordings": [
             {
@@ -253,7 +275,7 @@ async def get_voice_recordings(
                 "object_key": r.minio_object_key,
                 "duration_seconds": r.duration_seconds,
                 "recording_type": r.recording_type,
-                "label": r.label or f"Recording {i + 1} ({r.recording_type})",
+                "label": resolve_label(r),
                 "uploaded_at": r.uploaded_at.isoformat(),
                 "playback_url": enrollment.get_download_url(r.minio_object_key, expires_hours=1),
             }
