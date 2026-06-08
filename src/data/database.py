@@ -111,6 +111,12 @@ async def get_db() -> AsyncSession:
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Additive column migrations — safe to run on every startup (IF NOT EXISTS)
+        await conn.execute(
+            __import__('sqlalchemy').text(
+                "ALTER TABLE voice_recordings ADD COLUMN IF NOT EXISTS label VARCHAR(512)"
+            )
+        )
 
 
 # ─── ChromaDB client ─────────────────────────────────────────────────────────
