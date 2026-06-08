@@ -37,7 +37,7 @@ export default function VoiceEnrollmentPage() {
   const currentPromptRef = useRef('')
   const nextRecordingIndexRef = useRef(0)
 
-  // Load any recordings already uploaded in a previous session
+  // Load any recordings already uploaded in a previous session and restore prompt position
   useEffect(() => {
     const clientId = localStorage.getItem('echo_client_id')
     if (!clientId) return
@@ -54,6 +54,23 @@ export default function VoiceEnrollmentPage() {
       }))
       setRecordings(restored)
       nextRecordingIndexRef.current = recordings.length
+
+      // Restore phase and prompt position from recorded counts
+      const scriptedDone = recordings.filter((r) => r.recording_type === 'scripted').length
+      const spontaneousDone = recordings.filter((r) => r.recording_type === 'spontaneous').length
+      const scriptedTotal = T.voice_scripted_prompts.length
+      const spontaneousTotal = T.voice_spontaneous_topics.length
+
+      if (scriptedDone < scriptedTotal) {
+        // Still in scripted phase — land on the next unrecorded scripted prompt
+        setPhase('scripted')
+        setCurrentPromptIndex(scriptedDone)
+      } else if (spontaneousDone < spontaneousTotal) {
+        // Scripted complete, in spontaneous phase
+        setPhase('spontaneous')
+        setCurrentPromptIndex(spontaneousDone)
+      }
+      // If both complete, leave phase/index as-is — allDone will be true
     }).catch(() => {/* silent — fresh session if fetch fails */})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

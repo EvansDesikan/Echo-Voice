@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import OnboardingLayout from '../../components/OnboardingLayout'
@@ -6,13 +6,27 @@ import { QUESTIONS, PAGES } from '../../data/questions'
 import { submitQuestionnaire } from '../../api/client'
 import { useLang } from '../../context/LanguageContext'
 
+function quizStorageKey(clientId: string) { return `echo_quiz_${clientId}` }
+
 export default function QuestionnairePage() {
   const navigate = useNavigate()
   const { T, lang } = useLang()
-  const [answers, setAnswers] = useState<Record<string, number>>({})
-  const [page, setPage] = useState(0)
+  const clientId = localStorage.getItem('echo_client_id') ?? ''
+
+  // Restore saved progress from localStorage on first render
+  const savedRaw = clientId ? localStorage.getItem(quizStorageKey(clientId)) : null
+  const saved = savedRaw ? JSON.parse(savedRaw) : null
+
+  const [answers, setAnswers] = useState<Record<string, number>>(saved?.answers ?? {})
+  const [page, setPage] = useState<number>(saved?.page ?? 0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Persist answers + page to localStorage on every change
+  useEffect(() => {
+    if (!clientId) return
+    localStorage.setItem(quizStorageKey(clientId), JSON.stringify({ answers, page }))
+  }, [answers, page, clientId])
 
   const currentQuestions = PAGES[page]
   const totalPages = PAGES.length
@@ -27,11 +41,11 @@ export default function QuestionnairePage() {
   function goPrev() { if (page > 0) { setPage((p) => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }) } }
 
   async function handleSubmit() {
-    const clientId = localStorage.getItem('echo_client_id')
     if (!clientId) { navigate('/onboarding/consent'); return }
     setLoading(true); setError('')
     try {
       await submitQuestionnaire({ client_id: clientId, answers })
+      localStorage.removeItem(quizStorageKey(clientId))
       navigate('/onboarding/phrases')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Ein Fehler ist aufgetreten.')
