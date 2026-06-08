@@ -362,9 +362,6 @@ export default function VoiceEnrollmentPage() {
                   <span style={{ fontSize: '0.82rem', flex: 1, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {r.label}
                   </span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0 }}>
-                    {formatTime(r.duration)}
-                  </span>
                   {r.uploaded
                     ? <CheckCircle size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />
                     : <Upload size={14} style={{ color: 'var(--text-muted)', flexShrink: 0, opacity: 0.6 }} />
