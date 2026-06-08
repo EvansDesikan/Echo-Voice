@@ -74,6 +74,7 @@ export async function login(email: string): Promise<LoginResponse> {
       has_voice_clone: true,
       has_personality: true,
       has_phrases: true,
+      voice_recording_count: 6,
     }
   }
   return post('/auth/login', { email })
