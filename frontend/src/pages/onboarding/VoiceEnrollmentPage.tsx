@@ -149,7 +149,8 @@ export default function VoiceEnrollmentPage() {
   }
 
   function formatTime(s: number) {
-    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+    const total = Math.round(s)
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
   }
 
   const allDone = phase === 'spontaneous' && currentPromptIndex === T.voice_spontaneous_topics.length - 1 && state === 'done'
