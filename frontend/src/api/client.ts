@@ -2,7 +2,6 @@
 // On Vercel (production build) demo mode is always on — no backend is deployed.
 // Also activated via: ?demo=true URL param, localStorage flag, or VITE_DEMO_MODE env var.
 export const DEMO_MODE =
-  import.meta.env.PROD ||
   import.meta.env.VITE_DEMO_MODE === 'true' ||
   new URLSearchParams(location.search).get('demo') === 'true' ||
   localStorage.getItem('echo_demo_mode') === 'true'
@@ -160,6 +159,8 @@ export function openVoiceSocket(_sessionId: string): WebSocket {
     // Return a stub WebSocket that never errors — voice mode just won't produce audio
     return new WebSocket(`ws://${location.host}/demo-noop`)
   }
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  return new WebSocket(`${proto}://${location.host}/session/voice/${_sessionId}`)
+  const apiUrl = import.meta.env.VITE_API_URL || `${location.protocol}//${location.host}`
+  const proto = apiUrl.startsWith('https') ? 'wss' : 'ws'
+  const wsBase = apiUrl.replace(/^https?/, proto)
+  return new WebSocket(`${wsBase}/session/voice/${_sessionId}`)
 }
