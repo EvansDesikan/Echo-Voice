@@ -3,6 +3,7 @@ Backend Engineer — FastAPI Application Entry Point
 Wires together all routes and starts the async application.
 """
 import base64
+import traceback
 import uuid
 from contextlib import asynccontextmanager
 from typing import Dict, Optional
@@ -194,22 +195,32 @@ async def upload_voice_recording(
         raise HTTPException(status_code=404, detail="Client not found")
 
     audio_bytes = await audio.read()
-    enrollment = VoiceEnrollmentManager()
-    object_key, duration = await enrollment.upload_recording(
-        client_id=client_id,
-        audio_bytes=audio_bytes,
-        recording_type=recording_type,
-        index=index,
-    )
+    logger.info(f"voice-upload: client={client_id} type={recording_type} index={index} size={len(audio_bytes)}b")
 
-    recording = VoiceRecording(
-        client_id=client.id,
-        minio_object_key=object_key,
-        duration_seconds=duration,
-        recording_type=recording_type,
-    )
-    db.add(recording)
-    await db.commit()
+    try:
+        enrollment = VoiceEnrollmentManager()
+        object_key, duration = await enrollment.upload_recording(
+            client_id=client_id,
+            audio_bytes=audio_bytes,
+            recording_type=recording_type,
+            index=index,
+        )
+    except Exception as e:
+        logger.error(f"R2 upload failed for client {client_id} recording {index}:\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Audio upload to storage failed: {e}")
+
+    try:
+        recording = VoiceRecording(
+            client_id=client.id,
+            minio_object_key=object_key,
+            duration_seconds=duration,
+            recording_type=recording_type,
+        )
+        db.add(recording)
+        await db.commit()
+    except Exception as e:
+        logger.error(f"DB insert failed for {object_key}:\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Database write failed: {e}")
 
     logger.info(f"Voice recording saved: {object_key} ({duration:.1f}s) for client {client_id}")
     return {"object_key": object_key, "duration_seconds": duration}

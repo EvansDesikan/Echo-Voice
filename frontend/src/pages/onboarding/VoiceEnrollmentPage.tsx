@@ -227,7 +227,7 @@ export default function VoiceEnrollmentPage() {
           borderRadius: 'var(--radius)',
           border: '1px solid var(--border-light)',
         }}>
-          <strong style={{ color: 'var(--primary)', fontWeight: 600 }}>HINWEIS: </strong>
+          <strong style={{ color: 'var(--primary)', fontWeight: 600 }}>{T.voice_note_label}: </strong>
           {currentNote}
         </p>
 
@@ -301,7 +301,7 @@ export default function VoiceEnrollmentPage() {
               </div>
               {allDone && (
                 <p style={{ fontSize: '0.82rem', color: 'var(--success)', textAlign: 'center', marginTop: 4, fontWeight: 500 }}>
-                  Alle Aufnahmen abgeschlossen — bitte drücken Sie unten auf „Weiter".
+                  {T.voice_all_done}
                 </p>
               )}
             </div>
