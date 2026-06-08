@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Mic, Square, Play, CheckCircle, ChevronRight, Loader2, Upload } from 'lucide-react'
+import { Mic, Square, CheckCircle, ChevronRight, Loader2, Upload } from 'lucide-react'
 import OnboardingLayout from '../../components/OnboardingLayout'
 import { useLang } from '../../context/LanguageContext'
 import { uploadVoiceRecording, createVoiceClone, getVoiceRecordings } from '../../api/client'
@@ -346,24 +346,28 @@ export default function VoiceEnrollmentPage() {
             {recordings.map((r, i) => (
               <div key={i} style={{
                 display: 'flex',
-                alignItems: 'center',
-                gap: 12,
+                flexDirection: 'column',
+                gap: 6,
                 padding: '10px 14px',
                 background: 'var(--bg-card)',
                 border: '1px solid var(--border-light)',
                 borderRadius: 'var(--radius)',
               }}>
-                <Play size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                <span style={{ fontSize: '0.82rem', flex: 1, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.label}
-                </span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0 }}>
-                  {formatTime(r.duration)}
-                </span>
-                {r.uploaded
-                  ? <CheckCircle size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />
-                  : <Upload size={14} style={{ color: 'var(--text-muted)', flexShrink: 0, opacity: 0.6 }} />
-                }
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: '0.82rem', flex: 1, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {r.label}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                    {formatTime(r.duration)}
+                  </span>
+                  {r.uploaded
+                    ? <CheckCircle size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />
+                    : <Upload size={14} style={{ color: 'var(--text-muted)', flexShrink: 0, opacity: 0.6 }} />
+                  }
+                </div>
+                {r.url && (
+                  <audio controls src={r.url} style={{ width: '100%', height: 32 }} />
+                )}
               </div>
             ))}
           </div>
