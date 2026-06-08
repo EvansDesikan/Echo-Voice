@@ -23,6 +23,7 @@ from src.voice.enrollment import VoiceEnrollmentManager
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 
 # ─── Active sessions (in-memory, keyed by session_id) ───────────────────────
@@ -105,8 +106,15 @@ async def register_client_with_consent(
         consent_timestamp=datetime.utcnow(),
     )
     db.add(client)
-    await db.commit()
-    await db.refresh(client)
+    try:
+        await db.commit()
+        await db.refresh(client)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="An account with this email address already exists.",
+        )
 
     logger.info(f"New client registered: {client.id} ({client.full_name})")
     return {"client_id": str(client.id), "message": "Consent recorded. Welcome to ECHO Voice."}
