@@ -37,19 +37,14 @@ class VoiceCloneManager:
         """
         logger.info(f"Creating voice clone for '{client_name}' with {len(audio_file_paths)} files")
 
-        # ElevenLabs SDK accepts file paths for voice creation
-        files = [open(p, "rb") for p in audio_file_paths]
-        try:
-            voice = self._sync_client.clone(
-                name=f"ECHO_{client_name}",
-                description=description or f"Memorial voice for {client_name} — ECHO Voice",
-                files=files,
-            )
-            logger.success(f"Voice clone created: {voice.voice_id}")
-            return voice.voice_id
-        finally:
-            for f in files:
-                f.close()
+        # ElevenLabs SDK expects file paths (str/PathLike), not open file handles
+        voice = self._sync_client.clone(
+            name=f"ECHO_{client_name}",
+            description=description or f"Memorial voice for {client_name} — ECHO Voice",
+            files=[str(p) for p in audio_file_paths],
+        )
+        logger.success(f"Voice clone created: {voice.voice_id}")
+        return voice.voice_id
 
     async def synthesize(
         self,
