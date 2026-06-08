@@ -70,7 +70,7 @@ class VoiceEnrollmentManager:
             settings.MINIO_ENDPOINT,
             access_key=settings.MINIO_ACCESS_KEY,
             secret_key=settings.MINIO_SECRET_KEY,
-            secure=False,
+            secure=True,  # Cloudflare R2 requires HTTPS
         )
         self._ensure_bucket()
 
