@@ -106,30 +106,23 @@ export default function VoiceEnrollmentPage() {
       const index = nextRecordingIndexRef.current
       nextRecordingIndexRef.current += 1
 
-      // Add to state immediately with timer duration as placeholder
+      // Add to state with the timer duration — this is always accurate for MediaRecorder blobs.
+      // (MediaRecorder WebM containers don't embed duration metadata, so audio.duration is
+      // unreliable and can spike the progress bar. The elapsed timer is the source of truth.)
       setRecordings((prev) => [...prev, {
         blob, url, type: capturedPhase, label: capturedLabel,
         duration: timerDuration, uploaded: false, index,
       }])
       setState('done')
 
-      // Get real duration from audio element metadata, then upload with accurate value
-      const audio = new Audio(url)
-      audio.addEventListener('loadedmetadata', () => {
-        const realDuration = isFinite(audio.duration) && audio.duration > 0
-          ? audio.duration
-          : timerDuration
-        setRecordings((rs) =>
-          rs.map((r) => (r.index === index ? { ...r, duration: realDuration } : r))
-        )
-        uploadVoiceRecording(clientId, blob, capturedPhase, index, realDuration, capturedLabel)
-          .then(() => {
-            setRecordings((rs) =>
-              rs.map((r) => (r.index === index ? { ...r, uploaded: true } : r))
-            )
-          })
-          .catch((err) => console.error(`Upload failed for recording ${index}:`, err))
-      })
+      // Upload immediately — no need to wait for audio metadata
+      uploadVoiceRecording(clientId, blob, capturedPhase, index, timerDuration, capturedLabel)
+        .then(() => {
+          setRecordings((rs) =>
+            rs.map((r) => (r.index === index ? { ...r, uploaded: true } : r))
+          )
+        })
+        .catch((err) => console.error(`Upload failed for recording ${index}:`, err))
     }
 
     mr.start(100)
@@ -389,14 +382,6 @@ export default function VoiceEnrollmentPage() {
                     controls
                     src={r.url}
                     style={{ width: '100%', height: 32 }}
-                    onLoadedMetadata={(e) => {
-                      const real = e.currentTarget.duration
-                      if (isFinite(real) && real > 0) {
-                        setRecordings((rs) =>
-                          rs.map((rec) => rec.index === r.index ? { ...rec, duration: real } : rec)
-                        )
-                      }
-                    }}
                   />
                 )}
               </div>
@@ -408,7 +393,7 @@ export default function VoiceEnrollmentPage() {
       <button
         className="btn btn--primary btn--full btn--lg"
         onClick={handleContinue}
-        disabled={totalDuration < 600 || uploading}
+        disabled={uploading}
       >
         {uploading && <Loader2 size={16} style={{ marginRight: 8, animation: 'spin 1s linear infinite' }} />}
         {uploadPhase === 'uploading'
@@ -419,11 +404,6 @@ export default function VoiceEnrollmentPage() {
           ? T.voice_upload_done
           : T.voice_btn_continue}
       </button>
-      {totalDuration < 600 && (
-        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: 8 }}>
-          {T.voice_btn_min}
-        </p>
-      )}
     </OnboardingLayout>
   )
 }
