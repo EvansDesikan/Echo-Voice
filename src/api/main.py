@@ -185,6 +185,8 @@ async def upload_voice_recording(
     client_id: str = Form(...),
     recording_type: str = Form(...),
     index: int = Form(0),
+    duration_seconds: float = Form(0),
+    label: str = Form(""),
     audio: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
@@ -204,6 +206,7 @@ async def upload_voice_recording(
             audio_bytes=audio_bytes,
             recording_type=recording_type,
             index=index,
+            duration_seconds=duration_seconds,
         )
     except Exception as e:
         logger.error(f"R2 upload failed for client {client_id} recording {index}:\n{traceback.format_exc()}")
@@ -215,6 +218,7 @@ async def upload_voice_recording(
             minio_object_key=object_key,
             duration_seconds=duration,
             recording_type=recording_type,
+            label=label or None,
         )
         db.add(recording)
         await db.commit()
@@ -249,6 +253,7 @@ async def get_voice_recordings(
                 "object_key": r.minio_object_key,
                 "duration_seconds": r.duration_seconds,
                 "recording_type": r.recording_type,
+                "label": r.label or f"Recording {i + 1} ({r.recording_type})",
                 "uploaded_at": r.uploaded_at.isoformat(),
                 "playback_url": enrollment.get_download_url(r.minio_object_key, expires_hours=1),
             }

@@ -51,6 +51,7 @@ export interface ExistingRecording {
   object_key: string
   duration_seconds: number
   recording_type: 'scripted' | 'spontaneous'
+  label: string
   uploaded_at: string
   playback_url: string
 }
@@ -199,15 +200,19 @@ export async function uploadVoiceRecording(
   audioBlob: Blob,
   recordingType: 'scripted' | 'spontaneous',
   index: number,
+  durationSeconds: number = 0,
+  label: string = '',
 ): Promise<{ object_key: string; duration_seconds: number }> {
   if (DEMO_MODE) {
     await delay(400)
-    return { object_key: `demo/${clientId}/${recordingType}/${index}.webm`, duration_seconds: 30 }
+    return { object_key: `demo/${clientId}/${recordingType}/${index}.webm`, duration_seconds: durationSeconds || 30 }
   }
   const form = new FormData()
   form.append('client_id', clientId)
   form.append('recording_type', recordingType)
   form.append('index', String(index))
+  form.append('duration_seconds', String(durationSeconds))
+  form.append('label', label)
   form.append('audio', audioBlob, `recording_${index}.webm`)
   const res = await fetch(`${BASE}/onboard/voice-upload`, { method: 'POST', body: form })
   if (!res.ok) {

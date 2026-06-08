@@ -61,6 +61,7 @@ class VoiceRecording(Base):
     minio_object_key = Column(String(512), nullable=False)
     duration_seconds = Column(Float, nullable=False)
     recording_type = Column(String(50))  # "scripted" | "spontaneous" | "phrase"
+    label = Column(String(512), nullable=True)   # prompt text shown to client
     transcription = Column(Text, nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 

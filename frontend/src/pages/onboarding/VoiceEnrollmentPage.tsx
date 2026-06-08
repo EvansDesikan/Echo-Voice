@@ -47,7 +47,7 @@ export default function VoiceEnrollmentPage() {
         blob: new Blob([], { type: 'audio/webm' }),  // placeholder — audio is already on R2
         url: r.playback_url,  // presigned R2 URL — valid for 1 hour
         type: r.recording_type,
-        label: `Recording ${r.index + 1} (${r.recording_type})`,
+        label: r.label,
         duration: r.duration_seconds,
         uploaded: true,
         index: r.index,
@@ -82,32 +82,37 @@ export default function VoiceEnrollmentPage() {
       const url = URL.createObjectURL(blob)
       const clientId = localStorage.getItem('echo_client_id') ?? ''
       // Use refs — not state — to get live values at stop time (fixes stale closure)
-      const capturedDuration = elapsedRef.current
+      const timerDuration = elapsedRef.current
       const capturedPhase = phaseRef.current
-      const capturedLabel = currentPromptRef.current.slice(0, 50) + '…'
+      const capturedLabel = currentPromptRef.current.slice(0, 80)
       // Use a stable monotonic index — not array.length — to avoid redo collisions
       const index = nextRecordingIndexRef.current
       nextRecordingIndexRef.current += 1
 
-      const newRecording: Recording = {
-        blob,
-        url,
-        type: capturedPhase,
-        label: capturedLabel,
-        duration: capturedDuration,
-        uploaded: false,
-        index,
-      }
-      setRecordings((prev) => [...prev, newRecording])
-      // Fire-and-forget upload immediately — mark as uploaded on success
-      uploadVoiceRecording(clientId, blob, capturedPhase, index)
-        .then(() => {
-          setRecordings((rs) =>
-            rs.map((r) => (r.index === index ? { ...r, uploaded: true } : r))
-          )
-        })
-        .catch((err) => console.error(`Upload failed for recording ${index}:`, err))
+      // Add to state immediately with timer duration as placeholder
+      setRecordings((prev) => [...prev, {
+        blob, url, type: capturedPhase, label: capturedLabel,
+        duration: timerDuration, uploaded: false, index,
+      }])
       setState('done')
+
+      // Get real duration from audio element metadata, then upload with accurate value
+      const audio = new Audio(url)
+      audio.addEventListener('loadedmetadata', () => {
+        const realDuration = isFinite(audio.duration) && audio.duration > 0
+          ? audio.duration
+          : timerDuration
+        setRecordings((rs) =>
+          rs.map((r) => (r.index === index ? { ...r, duration: realDuration } : r))
+        )
+        uploadVoiceRecording(clientId, blob, capturedPhase, index, realDuration, capturedLabel)
+          .then(() => {
+            setRecordings((rs) =>
+              rs.map((r) => (r.index === index ? { ...r, uploaded: true } : r))
+            )
+          })
+          .catch((err) => console.error(`Upload failed for recording ${index}:`, err))
+      })
     }
 
     mr.start(100)
@@ -164,7 +169,7 @@ export default function VoiceEnrollmentPage() {
       const pending = recordings.filter((r) => !r.uploaded)
       for (let i = 0; i < pending.length; i++) {
         setUploadProgress(i + 1)
-        await uploadVoiceRecording(clientId, pending[i].blob, pending[i].type, pending[i].index)
+        await uploadVoiceRecording(clientId, pending[i].blob, pending[i].type, pending[i].index, pending[i].duration, pending[i].label)
       }
       setUploadPhase('cloning')
       await createVoiceClone(clientId)

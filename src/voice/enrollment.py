@@ -91,11 +91,14 @@ class VoiceEnrollmentManager:
         audio_bytes: bytes,
         recording_type: str,  # "scripted" | "spontaneous" | "phrase"
         index: int = 0,
+        duration_seconds: float = 0,
     ) -> Tuple[str, float]:
         """
         Upload a recording to Cloudflare R2.
         All MinIO SDK calls run in a thread executor to avoid blocking the async event loop.
         Returns (object_key, duration_seconds).
+        duration_seconds should be supplied by the frontend (real elapsed time).
+        Falls back to a file-size estimate only when not provided.
         """
         await self._ensure_bucket()
 
@@ -115,10 +118,11 @@ class VoiceEnrollmentManager:
             ),
         )
 
-        # Rough duration estimate: WebM/Opus at ~40KB/s
-        est_duration = length / (40 * 1024)
-        logger.info(f"Uploaded {object_key} ({length} bytes, ~{est_duration:.1f}s)")
-        return object_key, est_duration
+        if duration_seconds <= 0:
+            duration_seconds = length / (40 * 1024)  # fallback estimate
+
+        logger.info(f"Uploaded {object_key} ({length} bytes, {duration_seconds:.1f}s)")
+        return object_key, duration_seconds
 
     def get_download_url(self, object_key: str, expires_hours: int = 1) -> str:
         """Generate a pre-signed URL for temporary download (e.g. to send to ElevenLabs)."""
