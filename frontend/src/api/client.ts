@@ -43,6 +43,25 @@ export interface LoginResponse {
   has_voice_clone: boolean
   has_personality: boolean
   has_phrases: boolean
+  voice_recording_count: number
+}
+
+export interface ExistingRecording {
+  index: number
+  object_key: string
+  duration_seconds: number
+  recording_type: 'scripted' | 'spontaneous'
+  uploaded_at: string
+}
+
+export async function getVoiceRecordings(clientId: string): Promise<{ recordings: ExistingRecording[]; total_duration: number }> {
+  if (DEMO_MODE) {
+    await delay(300)
+    return { recordings: [], total_duration: 0 }
+  }
+  const res = await fetch(`${BASE}/onboard/voice-recordings/${clientId}`)
+  if (!res.ok) throw new Error('Failed to fetch recordings')
+  return res.json()
 }
 
 export async function login(email: string): Promise<LoginResponse> {

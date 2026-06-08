@@ -226,6 +226,36 @@ async def upload_voice_recording(
     return {"object_key": object_key, "duration_seconds": duration}
 
 
+@app.get("/onboard/voice-recordings/{client_id}")
+async def get_voice_recordings(
+    client_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return all voice recordings already uploaded for this client."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    recs_result = await db.execute(
+        select(VoiceRecording).where(VoiceRecording.client_id == client.id)
+    )
+    recs = recs_result.scalars().all()
+    return {
+        "recordings": [
+            {
+                "index": i,
+                "object_key": r.minio_object_key,
+                "duration_seconds": r.duration_seconds,
+                "recording_type": r.recording_type,
+                "uploaded_at": r.uploaded_at.isoformat(),
+            }
+            for i, r in enumerate(recs)
+        ],
+        "total_duration": sum(r.duration_seconds for r in recs),
+    }
+
+
 @app.post("/onboard/create-voice-clone")
 async def create_voice_clone(
     client_id: str,
@@ -315,7 +345,12 @@ async def login(
     if not client:
         raise HTTPException(status_code=404, detail="No account found with this email address.")
 
-    logger.info(f"Login: {client.id} ({client.email})")
+    recs_result = await db.execute(
+        select(VoiceRecording).where(VoiceRecording.client_id == client.id)
+    )
+    recording_count = len(recs_result.scalars().all())
+
+    logger.info(f"Login: {client.id} ({client.email}), {recording_count} recordings")
     return {
         "client_id": str(client.id),
         "client_name": client.full_name,
@@ -323,6 +358,7 @@ async def login(
         "has_voice_clone": bool(client.elevenlabs_voice_id),
         "has_personality": bool(client.personality_scores),
         "has_phrases": bool(client.phrase_bank),
+        "voice_recording_count": recording_count,
     }
 
 

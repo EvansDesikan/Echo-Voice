@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mic, Square, Play, CheckCircle, ChevronRight, Loader2, Upload } from 'lucide-react'
 import OnboardingLayout from '../../components/OnboardingLayout'
 import { useLang } from '../../context/LanguageContext'
-import { uploadVoiceRecording, createVoiceClone } from '../../api/client'
+import { uploadVoiceRecording, createVoiceClone, getVoiceRecordings } from '../../api/client'
 
 type RecordingState = 'idle' | 'recording' | 'done'
 
@@ -36,6 +36,26 @@ export default function VoiceEnrollmentPage() {
   const phaseRef = useRef<'scripted' | 'spontaneous'>('scripted')
   const currentPromptRef = useRef('')
   const nextRecordingIndexRef = useRef(0)
+
+  // Load any recordings already uploaded in a previous session
+  useEffect(() => {
+    const clientId = localStorage.getItem('echo_client_id')
+    if (!clientId) return
+    getVoiceRecordings(clientId).then(({ recordings }) => {
+      if (recordings.length === 0) return
+      const restored: Recording[] = recordings.map((r) => ({
+        blob: new Blob([], { type: 'audio/webm' }),  // placeholder — audio is already on R2
+        url: '',
+        type: r.recording_type,
+        label: `Recording ${r.index + 1} (${r.recording_type})`,
+        duration: r.duration_seconds,
+        uploaded: true,
+        index: r.index,
+      }))
+      setRecordings(restored)
+      nextRecordingIndexRef.current = recordings.length
+    }).catch(() => {/* silent — fresh session if fetch fails */})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const prompts = phase === 'scripted' ? T.voice_scripted_prompts : T.voice_spontaneous_topics
   const notes = phase === 'scripted' ? T.voice_scripted_notes : T.voice_spontaneous_topics_notes

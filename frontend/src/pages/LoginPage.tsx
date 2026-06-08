@@ -23,8 +23,11 @@ export default function LoginPage() {
 
       if (data.onboarding_complete) {
         navigate('/family')
-      } else if (!data.has_personality) {
+      } else if (!data.has_voice_clone) {
+        // Resume voice enrollment — page will load existing recordings from DB
         navigate('/onboarding/voice')
+      } else if (!data.has_personality) {
+        navigate('/onboarding/quiz')
       } else if (!data.has_phrases) {
         navigate('/onboarding/phrases')
       } else {
