@@ -3,6 +3,7 @@ Backend Engineer — FastAPI Application Entry Point
 Wires together all routes and starts the async application.
 """
 import base64
+import secrets
 import traceback
 import uuid
 from contextlib import asynccontextmanager
@@ -81,6 +82,10 @@ class StartSessionRequest(BaseModel):
 
 class StartSessionByEmailRequest(BaseModel):
     email: str
+    family_member_name: Optional[str] = None
+
+class StartSessionByCodeRequest(BaseModel):
+    access_code: str
     family_member_name: Optional[str] = None
 
 class TextChatRequest(BaseModel):
@@ -466,6 +471,74 @@ async def start_session_by_email(
     if not client:
         raise HTTPException(status_code=404, detail="No memorial found for that email address.")
     return await _build_session(client, req.family_member_name, db)
+
+
+# Charset for access codes: uppercase, no ambiguous chars (0/O/1/I/L)
+_CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+
+async def _generate_unique_code(db: AsyncSession) -> str:
+    """Generate a unique 8-char access code, checking DB for collisions."""
+    for _ in range(20):
+        code = ''.join(secrets.choice(_CODE_CHARSET) for _ in range(8))
+        result = await db.execute(select(Client).where(Client.family_access_code == code))
+        if not result.scalar_one_or_none():
+            return code
+    raise HTTPException(status_code=500, detail="Could not generate a unique access code — please try again.")
+
+
+@app.post("/session/start-by-code")
+async def start_session_by_code(
+    req: StartSessionByCodeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create a new conversation session using the client's family access code.
+    This is the primary family access endpoint — family members enter the code
+    shared by their loved one to connect with their memorial.
+    """
+    code = req.access_code.strip().upper().replace('-', '')
+    result = await db.execute(select(Client).where(Client.family_access_code == code))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="No memorial found for that access code.")
+    return await _build_session(client, req.family_member_name, db)
+
+
+@app.post("/client/{client_id}/generate-access-code")
+async def generate_access_code(
+    client_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate and store a unique family access code for the client."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    # Reuse existing code if already generated
+    if client.family_access_code:
+        return {"access_code": client.family_access_code}
+
+    code = await _generate_unique_code(db)
+    client.family_access_code = code
+    await db.commit()
+
+    logger.info(f"Access code generated for client {client_id}: {code}")
+    return {"access_code": code}
+
+
+@app.get("/client/{client_id}/access-code")
+async def get_access_code(
+    client_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the current family access code for the client."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return {"access_code": client.family_access_code}
 
 
 @app.post("/session/text-chat")

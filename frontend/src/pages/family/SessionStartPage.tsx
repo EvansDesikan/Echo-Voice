@@ -1,24 +1,36 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Nav from '../../components/Nav'
-import { startSessionByEmail } from '../../api/client'
+import { startSessionByCode } from '../../api/client'
 import { useLang } from '../../context/LanguageContext'
+
+// Format raw input as XXXX-XXXX for display
+function formatCode(raw: string): string {
+  const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+  return clean.length > 4 ? `${clean.slice(0, 4)}-${clean.slice(4)}` : clean
+}
 
 export default function SessionStartPage() {
   const navigate = useNavigate()
   const { T } = useLang()
-  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
   const [familyName, setFamilyName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  function handleCodeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setCode(formatCode(e.target.value))
+  }
+
+  const rawCode = code.replace('-', '')
+
   async function handleStart() {
-    if (!email.trim()) { setError(T.session_err_empty); return }
+    if (rawCode.length < 8) { setError(T.session_err_empty); return }
     setLoading(true)
     setError('')
     try {
-      const session = await startSessionByEmail({
-        email: email.trim().toLowerCase(),
+      const session = await startSessionByCode({
+        access_code: rawCode,
         family_member_name: familyName.trim() || undefined,
       })
       localStorage.setItem('echo_session_id', session.session_id)
@@ -69,17 +81,19 @@ export default function SessionStartPage() {
             <div style={{ display: 'grid', gap: 18 }}>
 
               <div className="form-group">
-                <label className="form-label">{T.session_email_label}</label>
+                <label className="form-label">{T.session_code_label}</label>
                 <input
                   className="form-input"
-                  type="email"
-                  placeholder={T.session_email_placeholder}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  type="text"
+                  placeholder={T.session_code_placeholder}
+                  value={code}
+                  onChange={handleCodeChange}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleStart() }}
-                  autoComplete="email"
+                  autoComplete="off"
+                  spellCheck={false}
+                  style={{ fontFamily: 'monospace', fontSize: '1.15rem', letterSpacing: '0.12em', textTransform: 'uppercase' }}
                 />
-                <span className="form-hint">{T.session_email_hint}</span>
+                <span className="form-hint">{T.session_code_hint}</span>
               </div>
 
               <div className="form-group">
@@ -102,7 +116,7 @@ export default function SessionStartPage() {
               <button
                 className="btn btn--primary btn--full btn--lg"
                 onClick={handleStart}
-                disabled={loading || !email.trim()}
+                disabled={loading || rawCode.length < 8}
               >
                 {loading ? T.session_btn_loading : T.session_btn}
               </button>

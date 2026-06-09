@@ -1,10 +1,39 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { CheckCircle, Heart } from 'lucide-react'
+import { CheckCircle, Heart, Copy, Check } from 'lucide-react'
 import { useLang } from '../../context/LanguageContext'
+import { generateAccessCode } from '../../api/client'
 
 export default function OnboardingCompletePage() {
   const { T } = useLang()
   const name = localStorage.getItem('echo_client_name') || 'Ihr Profil'
+  const clientId = localStorage.getItem('echo_client_id') || ''
+
+  const [accessCode, setAccessCode] = useState<string | null>(null)
+  const [codeLoading, setCodeLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!clientId) { setCodeLoading(false); return }
+    generateAccessCode(clientId)
+      .then((res) => setAccessCode(res.access_code))
+      .catch(() => setAccessCode(null))
+      .finally(() => setCodeLoading(false))
+  }, [clientId])
+
+  function handleCopy() {
+    if (!accessCode) return
+    const display = `${accessCode.slice(0, 4)}-${accessCode.slice(4)}`
+    navigator.clipboard.writeText(display).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  // Format stored code (no dash) as XXXX-XXXX for display
+  const displayCode = accessCode
+    ? `${accessCode.slice(0, 4)}-${accessCode.slice(4)}`
+    : null
 
   return (
     <div style={{
@@ -39,9 +68,56 @@ export default function OnboardingCompletePage() {
         {T.complete_p1}
       </p>
 
-      <p style={{ maxWidth: 460, marginBottom: 40, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+      <p style={{ maxWidth: 460, marginBottom: 32, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
         {T.complete_p2}
       </p>
+
+      {/* Family access code */}
+      <div style={{
+        background: 'var(--bg-subtle)',
+        border: '2px solid var(--primary-light)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '24px 28px',
+        maxWidth: 500,
+        width: '100%',
+        marginBottom: 32,
+        textAlign: 'center',
+      }}>
+        <h4 style={{ fontFamily: 'var(--font-display)', marginBottom: 8 }}>{T.complete_access_code_title}</h4>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 20 }}>
+          {T.complete_access_code_desc}
+        </p>
+
+        {codeLoading ? (
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{T.complete_access_code_loading}</p>
+        ) : displayCode ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+            <span style={{
+              fontFamily: 'monospace',
+              fontSize: '2rem',
+              fontWeight: 700,
+              letterSpacing: '0.18em',
+              color: 'var(--primary)',
+              background: 'var(--bg)',
+              border: '1px solid var(--border-light)',
+              borderRadius: 'var(--radius)',
+              padding: '10px 24px',
+            }}>
+              {displayCode}
+            </span>
+            <button
+              onClick={handleCopy}
+              className="btn btn--ghost"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
+            >
+              {copied
+                ? <><Check size={15} />{T.complete_access_code_copied}</>
+                : <><Copy size={15} />{T.complete_access_code_copy}</>
+              }
+            </button>
+          </div>
+        ) : null}
+      </div>
 
       {/* What happens next */}
       <div style={{

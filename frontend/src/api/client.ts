@@ -187,6 +187,42 @@ export async function startSessionByEmail(data: {
   return post('/session/start-by-email', data)
 }
 
+export async function startSessionByCode(data: {
+  access_code: string
+  family_member_name?: string
+}): Promise<SessionResponse> {
+  if (DEMO_MODE) {
+    await delay()
+    return {
+      session_id: 'demo-session-00000000-0000-0000-0000-000000000002',
+      client_name: localStorage.getItem('echo_persona_name') || 'Maria Müller',
+      language: 'de',
+    }
+  }
+  return post('/session/start-by-code', data)
+}
+
+export async function generateAccessCode(clientId: string): Promise<{ access_code: string }> {
+  if (DEMO_MODE) {
+    await delay(400)
+    return { access_code: 'DEMO7X3K' }
+  }
+  return post(`/client/${clientId}/generate-access-code`, {})
+}
+
+export async function getAccessCode(clientId: string): Promise<{ access_code: string | null }> {
+  if (DEMO_MODE) {
+    await delay(200)
+    return { access_code: 'DEMO7X3K' }
+  }
+  const res = await fetch(`${BASE}/client/${clientId}/access-code`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Request failed' }))
+    throw new Error(err.detail || 'Request failed')
+  }
+  return res.json()
+}
+
 const DEMO_RESPONSES = [
   'Schön, dass du dich meldest, mein Schatz. Wie geht es dir heute?',
   'Ich denke oft an uns — weißt du noch, damals auf Rügen? Das waren wirklich wunderschöne Tage.',

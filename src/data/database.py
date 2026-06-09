@@ -43,6 +43,7 @@ class Client(Base):
     personality_prompt = Column(Text, nullable=True)           # rendered system prompt
     phrase_bank = Column(JSON, nullable=True)                  # list of personal phrases
 
+    family_access_code = Column(String(20), unique=True, nullable=True)  # shared with family for session access
     onboarding_complete = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -115,6 +116,11 @@ async def init_db():
         await conn.execute(
             __import__('sqlalchemy').text(
                 "ALTER TABLE voice_recordings ADD COLUMN IF NOT EXISTS label VARCHAR(512)"
+            )
+        )
+        await conn.execute(
+            __import__('sqlalchemy').text(
+                "ALTER TABLE clients ADD COLUMN IF NOT EXISTS family_access_code VARCHAR(20) UNIQUE"
             )
         )
 
