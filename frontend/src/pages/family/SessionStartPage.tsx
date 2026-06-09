@@ -1,24 +1,24 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Nav from '../../components/Nav'
-import { startSession } from '../../api/client'
+import { startSessionByEmail } from '../../api/client'
 import { useLang } from '../../context/LanguageContext'
 
 export default function SessionStartPage() {
   const navigate = useNavigate()
   const { T } = useLang()
-  const [clientId, setClientId] = useState('')
+  const [email, setEmail] = useState('')
   const [familyName, setFamilyName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   async function handleStart() {
-    if (!clientId.trim()) { setError(T.session_err_empty); return }
+    if (!email.trim()) { setError(T.session_err_empty); return }
     setLoading(true)
     setError('')
     try {
-      const session = await startSession({
-        client_id: clientId.trim(),
+      const session = await startSessionByEmail({
+        email: email.trim().toLowerCase(),
         family_member_name: familyName.trim() || undefined,
       })
       localStorage.setItem('echo_session_id', session.session_id)
@@ -67,17 +67,19 @@ export default function SessionStartPage() {
           {/* Form */}
           <div className="card card--elevated">
             <div style={{ display: 'grid', gap: 18 }}>
+
               <div className="form-group">
-                <label className="form-label">{T.session_code_label}</label>
+                <label className="form-label">{T.session_email_label}</label>
                 <input
                   className="form-input"
-                  type="text"
-                  placeholder={T.session_code_placeholder}
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                  style={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}
+                  type="email"
+                  placeholder={T.session_email_placeholder}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleStart() }}
+                  autoComplete="email"
                 />
-                <span className="form-hint">{T.session_code_hint}</span>
+                <span className="form-hint">{T.session_email_hint}</span>
               </div>
 
               <div className="form-group">
@@ -88,6 +90,7 @@ export default function SessionStartPage() {
                   placeholder={T.session_name_placeholder}
                   value={familyName}
                   onChange={(e) => setFamilyName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleStart() }}
                 />
                 <span className="form-hint">{T.session_name_hint}</span>
               </div>
@@ -99,7 +102,7 @@ export default function SessionStartPage() {
               <button
                 className="btn btn--primary btn--full btn--lg"
                 onClick={handleStart}
-                disabled={loading}
+                disabled={loading || !email.trim()}
               >
                 {loading ? T.session_btn_loading : T.session_btn}
               </button>

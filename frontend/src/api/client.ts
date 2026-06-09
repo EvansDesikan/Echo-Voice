@@ -154,7 +154,7 @@ export async function buildPersonality(clientId: string): Promise<{ status: stri
 export interface SessionResponse {
   session_id: string
   client_name: string
-  message: string
+  language: string
 }
 
 export async function startSession(data: {
@@ -166,10 +166,25 @@ export async function startSession(data: {
     return {
       session_id: 'demo-session-00000000-0000-0000-0000-000000000002',
       client_name: localStorage.getItem('echo_persona_name') || 'Maria Müller',
-      message: 'Demo-Sitzung gestartet.',
+      language: 'de',
     }
   }
   return post('/session/start', data)
+}
+
+export async function startSessionByEmail(data: {
+  email: string
+  family_member_name?: string
+}): Promise<SessionResponse> {
+  if (DEMO_MODE) {
+    await delay()
+    return {
+      session_id: 'demo-session-00000000-0000-0000-0000-000000000002',
+      client_name: localStorage.getItem('echo_persona_name') || 'Maria Müller',
+      language: 'de',
+    }
+  }
+  return post('/session/start-by-email', data)
 }
 
 const DEMO_RESPONSES = [

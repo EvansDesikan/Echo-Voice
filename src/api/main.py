@@ -18,7 +18,7 @@ from config.settings import settings
 from src.agent.conversation import ConversationAgent, ClientProfile
 from src.agent.personality import render_system_prompt
 from src.agent.voice_clone import VoiceCloneManager
-from src.data.database import init_db, get_db, Client, QuestionnaireResponse, VoiceRecording, ConversationSession
+from src.data.database import init_db, get_db, AsyncSessionFactory, Client, QuestionnaireResponse, VoiceRecording, ConversationSession
 from src.questionnaire.scorer import process_questionnaire
 from src.voice.enrollment import VoiceEnrollmentManager
 
@@ -77,6 +77,10 @@ class MemorySubmission(BaseModel):
 
 class StartSessionRequest(BaseModel):
     client_id: str
+    family_member_name: Optional[str] = None
+
+class StartSessionByEmailRequest(BaseModel):
+    email: str
     family_member_name: Optional[str] = None
 
 class TextChatRequest(BaseModel):
@@ -393,21 +397,16 @@ async def login(
 
 # ─── Interaction routes ───────────────────────────────────────────────────────
 
-@app.post("/session/start")
-async def start_session(
-    req: StartSessionRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """Create a new conversation session for a family member."""
-    result = await db.execute(select(Client).where(Client.id == uuid.UUID(req.client_id)))
-    client = result.scalar_one_or_none()
+# Maps session_id → DB ConversationSession UUID (for turn count updates)
+_session_db_ids: Dict[str, uuid.UUID] = {}
 
-    if not client:
-        raise HTTPException(status_code=404, detail="Client not found")
+
+async def _build_session(client: Client, family_member_name: Optional[str], db: AsyncSession) -> dict:
+    """Shared logic: validate client, create agent + DB session record."""
     if not client.onboarding_complete:
-        raise HTTPException(status_code=400, detail="Client onboarding is not complete")
+        raise HTTPException(status_code=400, detail="This memorial has not been set up yet. Please check back later.")
     if not client.elevenlabs_voice_id:
-        raise HTTPException(status_code=400, detail="Voice clone not yet created")
+        raise HTTPException(status_code=400, detail="Voice profile is not ready yet.")
 
     profile = ClientProfile(
         client_id=str(client.id),
@@ -420,22 +419,73 @@ async def start_session(
     session_id = str(uuid.uuid4())
     active_sessions[session_id] = ConversationAgent(profile)
 
-    logger.info(f"Session {session_id} started for client {client.id}")
+    # Persist session to DB for audit + admin visibility
+    db_session = ConversationSession(
+        client_id=client.id,
+        family_member_name=family_member_name or None,
+        language=client.language,
+    )
+    db.add(db_session)
+    await db.commit()
+    await db.refresh(db_session)
+    _session_db_ids[session_id] = db_session.id
+
+    logger.info(f"Session {session_id} started for client {client.id} by '{family_member_name or 'anonymous'}'")
     return {
         "session_id": session_id,
         "client_name": client.full_name,
-        "message": f"Session started. You are now connected to {client.full_name}.",
+        "language": client.language,
     }
 
 
+@app.post("/session/start")
+async def start_session(
+    req: StartSessionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new conversation session by client UUID (internal use)."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(req.client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return await _build_session(client, req.family_member_name, db)
+
+
+@app.post("/session/start-by-email")
+async def start_session_by_email(
+    req: StartSessionByEmailRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create a new conversation session by the client's email address.
+    This is the primary family access endpoint — family members enter the
+    email of their deceased loved one to connect with their memorial.
+    """
+    result = await db.execute(select(Client).where(Client.email == req.email.strip().lower()))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="No memorial found for that email address.")
+    return await _build_session(client, req.family_member_name, db)
+
+
 @app.post("/session/text-chat")
-async def text_chat(req: TextChatRequest):
+async def text_chat(req: TextChatRequest, db: AsyncSession = Depends(get_db)):
     """Text-only chat (no audio). Useful for testing and accessibility."""
     agent = active_sessions.get(req.session_id)
     if not agent:
-        raise HTTPException(status_code=404, detail="Session not found or expired")
+        raise HTTPException(status_code=404, detail="Session not found or expired. Please start a new session.")
 
     response = await agent.generate_text_response(req.message)
+
+    # Increment turn count in DB
+    db_id = _session_db_ids.get(req.session_id)
+    if db_id:
+        result = await db.execute(select(ConversationSession).where(ConversationSession.id == db_id))
+        db_sess = result.scalar_one_or_none()
+        if db_sess:
+            db_sess.turn_count = (db_sess.turn_count or 0) + 1
+            await db.commit()
+
     return {"response": response}
 
 
@@ -450,17 +500,17 @@ async def voice_session(websocket: WebSocket, session_id: str):
     agent = active_sessions.get(session_id)
 
     if not agent:
-        await websocket.send_json({"error": "Session not found"})
+        await websocket.send_json({"error": "Session not found or expired. Please start a new session."})
         await websocket.close()
         return
 
     logger.info(f"WebSocket voice session opened: {session_id}")
+    turn_count = 0
 
     try:
         while True:
             data = await websocket.receive_json()
             audio_b64 = data.get("audio")
-
             if not audio_b64:
                 continue
 
@@ -468,19 +518,37 @@ async def voice_session(websocket: WebSocket, session_id: str):
             response_audio = await agent.process_audio_turn(audio_bytes)
 
             if response_audio:
+                turn_count += 1
                 await websocket.send_json({
                     "audio": base64.b64encode(response_audio).decode(),
                     "type": "audio_response",
                 })
 
     except WebSocketDisconnect:
-        logger.info(f"WebSocket session {session_id} disconnected")
+        logger.info(f"WebSocket session {session_id} disconnected after {turn_count} turns")
+        # Persist final turn count to DB
+        db_id = _session_db_ids.pop(session_id, None)
+        if db_id:
+            async with AsyncSessionFactory() as db:
+                result = await db.execute(select(ConversationSession).where(ConversationSession.id == db_id))
+                db_sess = result.scalar_one_or_none()
+                if db_sess:
+                    db_sess.turn_count = (db_sess.turn_count or 0) + turn_count
+                    db_sess.ended_at = __import__('datetime').datetime.utcnow()
+                    await db.commit()
         active_sessions.pop(session_id, None)
 
 
 @app.delete("/session/{session_id}")
-async def end_session(session_id: str):
-    """Cleanly end a session."""
+async def end_session(session_id: str, db: AsyncSession = Depends(get_db)):
+    """Cleanly end a session and mark it ended in the DB."""
+    db_id = _session_db_ids.pop(session_id, None)
+    if db_id:
+        result = await db.execute(select(ConversationSession).where(ConversationSession.id == db_id))
+        db_sess = result.scalar_one_or_none()
+        if db_sess:
+            db_sess.ended_at = __import__('datetime').datetime.utcnow()
+            await db.commit()
     active_sessions.pop(session_id, None)
     return {"status": "session ended"}
 
