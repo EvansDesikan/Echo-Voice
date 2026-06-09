@@ -160,6 +160,15 @@ class VoiceEnrollmentManager:
 
         return await loop.run_in_executor(None, _download)
 
+    async def delete_recording(self, object_key: str) -> None:
+        """Delete a recording from R2. Runs in thread to avoid blocking event loop."""
+        loop = asyncio.get_event_loop()
+
+        def _delete():
+            self._minio.remove_object(settings.MINIO_BUCKET, object_key)
+
+        await loop.run_in_executor(None, _delete)
+
     def get_scripted_prompts(self, language: str = "de") -> List[str]:
         return SCRIPTED_PROMPTS_DE if language == "de" else SCRIPTED_PROMPTS_EN
 

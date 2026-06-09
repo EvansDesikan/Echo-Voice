@@ -8,7 +8,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Dict, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, UploadFile, File, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -18,7 +18,7 @@ from config.settings import settings
 from src.agent.conversation import ConversationAgent, ClientProfile
 from src.agent.personality import render_system_prompt
 from src.agent.voice_clone import VoiceCloneManager
-from src.data.database import init_db, get_db, Client, QuestionnaireResponse, VoiceRecording
+from src.data.database import init_db, get_db, Client, QuestionnaireResponse, VoiceRecording, ConversationSession
 from src.questionnaire.scorer import process_questionnaire
 from src.voice.enrollment import VoiceEnrollmentManager
 
@@ -487,10 +487,219 @@ async def end_session(session_id: str):
 
 # ─── Admin routes ─────────────────────────────────────────────────────────────
 
+async def verify_admin_key(x_admin_key: str = Header(...)):
+    """Dependency: reject requests that don't carry the correct admin secret."""
+    if x_admin_key != settings.ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=401, detail="Invalid admin key")
+
+
+@app.get("/admin/stats")
+async def admin_stats(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_admin_key),
+):
+    """System-wide counts for the dashboard header."""
+    from sqlalchemy import func
+    clients_result = await db.execute(select(func.count()).select_from(Client))
+    total_clients = clients_result.scalar()
+
+    clones_result = await db.execute(
+        select(func.count()).select_from(Client).where(Client.elevenlabs_voice_id.isnot(None))
+    )
+    total_clones = clones_result.scalar()
+
+    complete_result = await db.execute(
+        select(func.count()).select_from(Client).where(Client.onboarding_complete == True)
+    )
+    total_complete = complete_result.scalar()
+
+    duration_result = await db.execute(select(func.sum(VoiceRecording.duration_seconds)))
+    total_duration = duration_result.scalar() or 0.0
+
+    recordings_result = await db.execute(select(func.count()).select_from(VoiceRecording))
+    total_recordings = recordings_result.scalar()
+
+    return {
+        "total_clients": total_clients,
+        "total_clones": total_clones,
+        "total_complete": total_complete,
+        "total_recordings": total_recordings,
+        "total_duration_seconds": round(total_duration, 1),
+        "avg_duration_per_client": round(total_duration / total_clients, 1) if total_clients else 0,
+    }
+
+
+@app.get("/admin/clients")
+async def list_clients(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_admin_key),
+):
+    from sqlalchemy import func
+    result = await db.execute(select(Client))
+    clients = result.scalars().all()
+
+    rows = []
+    for c in clients:
+        recs = await db.execute(
+            select(func.count(), func.sum(VoiceRecording.duration_seconds))
+            .where(VoiceRecording.client_id == c.id)
+        )
+        rec_count, rec_duration = recs.one()
+        rows.append({
+            "id": str(c.id),
+            "name": c.full_name,
+            "email": c.email,
+            "language": c.language,
+            "onboarding_complete": c.onboarding_complete,
+            "has_voice_clone": bool(c.elevenlabs_voice_id),
+            "has_personality": bool(c.personality_scores),
+            "has_phrases": bool(c.phrase_bank),
+            "phrase_count": len(c.phrase_bank) if c.phrase_bank else 0,
+            "recording_count": rec_count or 0,
+            "total_duration_seconds": round(rec_duration or 0.0, 1),
+            "created_at": c.created_at.isoformat(),
+        })
+    return rows
+
+
+@app.get("/admin/clients/{client_id}")
+async def admin_client_detail(
+    client_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_admin_key),
+):
+    """Full client detail for the admin detail view."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    recs_result = await db.execute(
+        select(VoiceRecording).where(VoiceRecording.client_id == client.id)
+    )
+    recs = recs_result.scalars().all()
+
+    sessions_result = await db.execute(
+        select(ConversationSession).where(ConversationSession.client_id == client.id)
+    )
+    sessions = sessions_result.scalars().all()
+
+    from src.data.database import QuestionnaireResponse as QR
+    q_result = await db.execute(select(QR).where(QR.client_id == client.id))
+    questionnaire = q_result.scalar_one_or_none()
+
+    return {
+        "id": str(client.id),
+        "name": client.full_name,
+        "email": client.email,
+        "language": client.language,
+        "consent_given": client.consent_given,
+        "consent_timestamp": client.consent_timestamp.isoformat() if client.consent_timestamp else None,
+        "created_at": client.created_at.isoformat(),
+        "onboarding_complete": client.onboarding_complete,
+        "elevenlabs_voice_id": client.elevenlabs_voice_id,
+        "phrase_bank": client.phrase_bank or [],
+        "ocean_scores": questionnaire.ocean_scores if questionnaire else None,
+        "behavioral_tags": questionnaire.behavioral_tags if questionnaire else None,
+        "recordings": [
+            {
+                "id": str(r.id),
+                "label": r.label or f"{r.recording_type} {i+1}",
+                "recording_type": r.recording_type,
+                "duration_seconds": r.duration_seconds,
+                "uploaded_at": r.uploaded_at.isoformat(),
+            }
+            for i, r in enumerate(recs)
+        ],
+        "sessions": [
+            {
+                "id": str(s.id),
+                "family_member_name": s.family_member_name,
+                "started_at": s.started_at.isoformat(),
+                "ended_at": s.ended_at.isoformat() if s.ended_at else None,
+                "turn_count": s.turn_count,
+            }
+            for s in sessions
+        ],
+    }
+
+
+@app.delete("/admin/clients/{client_id}/recordings")
+async def delete_all_recordings(
+    client_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_admin_key),
+):
+    """Delete all voice recordings for a client from R2 and Postgres."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    recs_result = await db.execute(
+        select(VoiceRecording).where(VoiceRecording.client_id == client.id)
+    )
+    recs = recs_result.scalars().all()
+
+    enrollment = VoiceEnrollmentManager()
+    deleted_count = 0
+    for rec in recs:
+        try:
+            await enrollment.delete_recording(rec.minio_object_key)
+        except Exception:
+            pass
+        await db.delete(rec)
+        deleted_count += 1
+
+    await db.commit()
+    logger.info(f"Admin: deleted {deleted_count} recordings for client {client_id}")
+    return {"status": "ok", "deleted_count": deleted_count}
+
+
+@app.delete("/admin/clients/{client_id}")
+async def delete_client(
+    client_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_admin_key),
+):
+    """Full client deletion: ElevenLabs clone + all R2 recordings + Postgres cascade."""
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    # Delete ElevenLabs clone if it exists
+    if client.elevenlabs_voice_id:
+        try:
+            voice_manager = VoiceCloneManager()
+            await voice_manager.delete_voice(client.elevenlabs_voice_id)
+        except Exception:
+            pass
+
+    # Delete all R2 recordings
+    recs_result = await db.execute(
+        select(VoiceRecording).where(VoiceRecording.client_id == client.id)
+    )
+    enrollment = VoiceEnrollmentManager()
+    for rec in recs_result.scalars().all():
+        try:
+            await enrollment.delete_recording(rec.minio_object_key)
+        except Exception:
+            pass
+
+    # Cascade delete via SQLAlchemy (recordings, questionnaire, sessions)
+    await db.delete(client)
+    await db.commit()
+
+    logger.info(f"Admin: full delete of client {client_id} ({client.full_name})")
+    return {"status": "deleted", "client_id": client_id, "name": client.full_name}
+
+
 @app.delete("/admin/clients/{client_id}/voice-clone")
 async def delete_voice_clone(
     client_id: str,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_admin_key),
 ):
     """
     Admin: delete the ElevenLabs voice clone for a client and clear voice_id from DB.

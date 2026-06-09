@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    ADMIN_SECRET_KEY: str = "change-me-admin-key"  # Set in Railway env vars
 
     # Paths
     BASE_DIR: Path = Path(__file__).parent.parent

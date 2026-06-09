@@ -230,6 +230,91 @@ export async function createVoiceClone(clientId: string): Promise<{ voice_id: st
   return post(`/onboard/create-voice-clone?client_id=${clientId}`, {})
 }
 
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+export const ADMIN_KEY_STORAGE = 'echo_admin_key'
+
+function adminHeaders(): HeadersInit {
+  const key = sessionStorage.getItem(ADMIN_KEY_STORAGE) || ''
+  return { 'Content-Type': 'application/json', 'X-Admin-Key': key }
+}
+
+async function adminGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { headers: adminHeaders() })
+  if (res.status === 401) throw new Error('UNAUTHORIZED')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Request failed' }))
+    throw new Error(err.detail || 'Request failed')
+  }
+  return res.json()
+}
+
+async function adminDelete<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: 'DELETE', headers: adminHeaders() })
+  if (res.status === 401) throw new Error('UNAUTHORIZED')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Request failed' }))
+    throw new Error(err.detail || 'Request failed')
+  }
+  return res.json()
+}
+
+export interface AdminStats {
+  total_clients: number
+  total_clones: number
+  total_complete: number
+  total_recordings: number
+  total_duration_seconds: number
+  avg_duration_per_client: number
+}
+
+export interface AdminClientRow {
+  id: string
+  name: string
+  email: string
+  language: string
+  onboarding_complete: boolean
+  has_voice_clone: boolean
+  has_personality: boolean
+  has_phrases: boolean
+  phrase_count: number
+  recording_count: number
+  total_duration_seconds: number
+  created_at: string
+}
+
+export interface AdminClientDetail extends AdminClientRow {
+  consent_given: boolean
+  consent_timestamp: string | null
+  elevenlabs_voice_id: string | null
+  phrase_bank: string[]
+  ocean_scores: Record<string, number> | null
+  behavioral_tags: string[] | null
+  recordings: {
+    id: string
+    label: string
+    recording_type: string
+    duration_seconds: number
+    uploaded_at: string
+  }[]
+  sessions: {
+    id: string
+    family_member_name: string | null
+    started_at: string
+    ended_at: string | null
+    turn_count: number
+  }[]
+}
+
+export const adminApi = {
+  getStats: () => adminGet<AdminStats>('/admin/stats'),
+  listClients: () => adminGet<AdminClientRow[]>('/admin/clients'),
+  getClient: (id: string) => adminGet<AdminClientDetail>(`/admin/clients/${id}`),
+  deleteVoiceClone: (id: string) => adminDelete<{ status: string }>(`/admin/clients/${id}/voice-clone`),
+  deleteRecordings: (id: string) => adminDelete<{ deleted_count: number }>(`/admin/clients/${id}/recordings`),
+  deleteClient: (id: string) => adminDelete<{ status: string; name: string }>(`/admin/clients/${id}`),
+}
+
 export async function endSession(sessionId: string): Promise<void> {
   if (DEMO_MODE) { await delay(200); return }
   await fetch(`${BASE}/session/${sessionId}`, { method: 'DELETE' })

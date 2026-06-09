@@ -13,6 +13,9 @@ import OnboardingCompletePage from './pages/onboarding/OnboardingCompletePage'
 import SessionStartPage from './pages/family/SessionStartPage'
 import VoiceChatPage from './pages/family/VoiceChatPage'
 import LoginPage from './pages/LoginPage'
+import AdminLoginPage from './pages/admin/AdminLoginPage'
+import AdminDashboardPage from './pages/admin/AdminDashboardPage'
+import AdminClientDetailPage from './pages/admin/AdminClientDetailPage'
 
 export default function App() {
   return (
@@ -36,6 +39,11 @@ export default function App() {
           {/* Family interaction */}
           <Route path="/family"                element={<SessionStartPage />} />
           <Route path="/family/chat/:sessionId" element={<VoiceChatPage />} />
+
+          {/* Admin — no Nav wrapper, internal tool */}
+          <Route path="/admin"                       element={<AdminLoginPage />} />
+          <Route path="/admin/dashboard"             element={<AdminDashboardPage />} />
+          <Route path="/admin/client/:clientId"      element={<AdminClientDetailPage />} />
         </Routes>
       </BrowserRouter>
     </LanguageProvider>
