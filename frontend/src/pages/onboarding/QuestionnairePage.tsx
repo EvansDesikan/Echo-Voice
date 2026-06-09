@@ -28,6 +28,11 @@ export default function QuestionnairePage() {
     localStorage.setItem(quizStorageKey(clientId), JSON.stringify({ answers, page }))
   }, [answers, page, clientId])
 
+  // Scroll to top AFTER React re-renders the new page content
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [page])
+
   const currentQuestions = PAGES[page]
   const totalPages = PAGES.length
   const overallProgress = Math.round((Object.keys(answers).length / QUESTIONS.length) * 100)
@@ -37,8 +42,8 @@ export default function QuestionnairePage() {
 
   function setAnswer(id: string, val: number) { setAnswers((p) => ({ ...p, [id]: val })) }
 
-  function goNext() { if (page < totalPages - 1) { setPage((p) => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }) } }
-  function goPrev() { if (page > 0) { setPage((p) => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }) } }
+  function goNext() { if (page < totalPages - 1) setPage((p) => p + 1) }
+  function goPrev() { if (page > 0) setPage((p) => p - 1) }
 
   async function handleSubmit() {
     if (!clientId) { navigate('/onboarding/consent'); return }
