@@ -332,6 +332,7 @@ export interface AdminClientRow {
   recording_count: number
   total_duration_seconds: number
   created_at: string
+  family_access_code: string | null
 }
 
 export interface AdminClientDetail extends AdminClientRow {

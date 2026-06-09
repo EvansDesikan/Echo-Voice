@@ -149,6 +149,11 @@ export default function AdminClientDetailPage() {
         {/* Identity card */}
         <Section title="Client Info">
           <InfoRow label="Status" value={client.onboarding_complete ? '✅ Onboarding complete' : '⏳ Onboarding in progress'} />
+          <InfoRow label={t('admin_col_access_code')} value={
+            client.family_access_code
+              ? `${client.family_access_code.slice(0, 4)}-${client.family_access_code.slice(4)}`
+              : t('admin_detail_none')
+          } mono />
           <InfoRow label={t('admin_detail_voice_id')} value={client.elevenlabs_voice_id || t('admin_detail_none')} mono />
           <InfoRow label="Phrases" value={`${client.phrase_count} submitted`} />
           <InfoRow label="Total audio" value={fmtDuration(totalDuration)} />

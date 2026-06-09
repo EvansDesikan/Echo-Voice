@@ -388,6 +388,11 @@ async def login(
     )
     recording_count = len(recs_result.scalars().all())
 
+    # Auto-generate access code for complete clients who don't have one yet
+    if client.onboarding_complete and not client.family_access_code:
+        client.family_access_code = await _generate_unique_code(db)
+        await db.commit()
+
     logger.info(f"Login: {client.id} ({client.email}), {recording_count} recordings")
     return {
         "client_id": str(client.id),
@@ -699,6 +704,7 @@ async def list_clients(
             "recording_count": rec_count or 0,
             "total_duration_seconds": round(rec_duration or 0.0, 1),
             "created_at": c.created_at.isoformat(),
+            "family_access_code": c.family_access_code,
         })
     return rows
 
@@ -739,6 +745,7 @@ async def admin_client_detail(
         "created_at": client.created_at.isoformat(),
         "onboarding_complete": client.onboarding_complete,
         "elevenlabs_voice_id": client.elevenlabs_voice_id,
+        "family_access_code": client.family_access_code,
         "phrase_bank": client.phrase_bank or [],
         "ocean_scores": questionnaire.ocean_scores if questionnaire else None,
         "behavioral_tags": questionnaire.behavioral_tags if questionnaire else None,

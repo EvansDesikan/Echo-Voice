@@ -201,6 +201,7 @@ export default function AdminDashboardPage() {
                   t('admin_col_name'), t('admin_col_email'), t('admin_col_lang'),
                   t('admin_col_status'), t('admin_col_clone'),
                   t('admin_col_recordings'), t('admin_col_duration'),
+                  t('admin_col_access_code'),
                   t('admin_col_registered'), t('admin_col_actions'),
                 ].map(col => (
                   <th key={col} style={{
@@ -221,7 +222,7 @@ export default function AdminDashboardPage() {
             <tbody>
               {clients.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <td colSpan={10} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
                     No clients yet.
                   </td>
                 </tr>
@@ -244,6 +245,14 @@ export default function AdminDashboardPage() {
                   </td>
                   <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>{c.recording_count}</td>
                   <td style={{ padding: '0.75rem 1rem', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtDuration(c.total_duration_seconds)}</td>
+                  <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
+                    {c.family_access_code
+                      ? <span style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--primary)' }}>
+                          {`${c.family_access_code.slice(0, 4)}-${c.family_access_code.slice(4)}`}
+                        </span>
+                      : <span style={{ color: 'var(--text-muted)' }}>—</span>
+                    }
+                  </td>
                   <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{fmtDate(c.created_at)}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
