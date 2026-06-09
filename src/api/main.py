@@ -740,4 +740,11 @@ async def list_clients(db: AsyncSession = Depends(get_db)):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": settings.APP_VERSION}
+    import os
+    return {
+        "status": "ok",
+        "version": settings.APP_VERSION,
+        # first 6 chars only — enough to diagnose without exposing the key
+        "admin_key_prefix": settings.ADMIN_SECRET_KEY[:6],
+        "admin_key_from_env": os.environ.get("ADMIN_SECRET_KEY", "NOT_SET")[:6],
+    }
