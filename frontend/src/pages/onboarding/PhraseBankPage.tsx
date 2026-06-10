@@ -1,7 +1,8 @@
 import { useState, KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, X, MessageCircle } from 'lucide-react'
+import { Plus, X, MessageCircle, Check } from 'lucide-react'
 import OnboardingLayout from '../../components/OnboardingLayout'
+import PhraseRecorder from '../../components/PhraseRecorder'
 import { submitPhrases } from '../../api/client'
 import { useLang } from '../../context/LanguageContext'
 
@@ -12,6 +13,8 @@ export default function PhraseBankPage() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [recordingPhrase, setRecordingPhrase] = useState<string | null>(null)
+  const [recordedPhrases, setRecordedPhrases] = useState<Set<string>>(new Set())
 
   function addPhrase(text: string) {
     const trimmed = text.trim()
@@ -22,6 +25,16 @@ export default function PhraseBankPage() {
 
   function removePhrase(phrase: string) {
     setPhrases((prev) => prev.filter((p) => p !== phrase))
+    setRecordedPhrases((prev) => { const s = new Set(prev); s.delete(phrase); return s })
+    if (recordingPhrase === phrase) setRecordingPhrase(null)
+  }
+
+  function handleRecorded(originalPhrase: string, correctedPhrase: string) {
+    if (correctedPhrase !== originalPhrase) {
+      setPhrases((prev) => prev.map((p) => p === originalPhrase ? correctedPhrase : p))
+    }
+    setRecordedPhrases((prev) => new Set(prev).add(correctedPhrase))
+    setRecordingPhrase(null)
   }
 
   function handleKey(e: KeyboardEvent<HTMLInputElement>) {
@@ -128,19 +141,56 @@ export default function PhraseBankPage() {
             <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: 12 }}>
               {phrases.length} {T.phrases_count}
             </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {phrases.map((p) => (
-                <span key={p} className="phrase-pill">
-                  {p}
-                  <button
-                    className="phrase-pill__remove"
-                    onClick={() => removePhrase(p)}
-                    title="Entfernen"
-                  >
-                    <X size={13} />
-                  </button>
-                </span>
-              ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {phrases.map((p) => {
+                const clientId = localStorage.getItem('echo_client_id') || ''
+                const isRecorded = recordedPhrases.has(p)
+                const isRecording = recordingPhrase === p
+                return (
+                  <div key={p}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span className="phrase-pill" style={{ flexShrink: 0 }}>
+                        {p}
+                        <button
+                          className="phrase-pill__remove"
+                          onClick={() => removePhrase(p)}
+                          title="Entfernen"
+                        >
+                          <X size={13} />
+                        </button>
+                      </span>
+                      {isRecorded ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#16a34a', fontWeight: 600 }}>
+                          <Check size={13} /> Aufgenommen
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setRecordingPhrase(isRecording ? null : p)}
+                          style={{
+                            background: 'none',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-full)',
+                            padding: '3px 10px',
+                            fontSize: '0.75rem',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {(T as unknown as Record<string, string>).phrase_rec_btn ?? 'Aufnehmen'}
+                        </button>
+                      )}
+                    </div>
+                    {isRecording && (
+                      <PhraseRecorder
+                        phrase={p}
+                        clientId={clientId}
+                        onRecorded={(corrected) => handleRecorded(p, corrected)}
+                        onCancel={() => setRecordingPhrase(null)}
+                      />
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}

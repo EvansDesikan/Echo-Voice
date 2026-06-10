@@ -173,6 +173,17 @@ const t = {
     phrases_btn_saving: 'Wird gespeichert…',
     phrases_min: 'Bitte geben Sie mindestens 3 Phrasen ein.',
 
+    // Phrase recorder
+    phrase_rec_title: 'Phrase aufnehmen',
+    phrase_rec_btn: 'Aufnehmen',
+    phrase_rec_recording: 'Aufnahme läuft…',
+    phrase_rec_transcribing: 'Wird transkribiert…',
+    phrase_rec_confirm_label: 'Gehörter Text — bitte korrigieren falls nötig:',
+    phrase_rec_confirm_btn: 'Bestätigen',
+    phrase_rec_cancel_btn: 'Abbrechen',
+    phrase_rec_mic_denied: 'Mikrofon-Zugriff wurde verweigert.',
+    phrase_rec_error: 'Aufnahme fehlgeschlagen. Bitte erneut versuchen.',
+
     // Memories
     mem_examples: [
       { text: 'Unser Familienurlaub 1994 auf Mallorca war mein liebster Urlaub. Wir haben jeden Abend zusammen gegessen.', memory_type: 'event' as const, source: 'client' as const },
@@ -196,6 +207,11 @@ const t = {
     mem_btn_finish: 'ECHO Voice Profil abschließen →',
     mem_btn_saving: 'Profil wird erstellt…',
     mem_min: 'Bitte fügen Sie mindestens 3 Erinnerungen hinzu.',
+
+    // Memory voice input
+    mem_voice_btn: 'Diktieren',
+    mem_voice_listening: 'Ich höre zu…',
+    mem_voice_transcribing: 'Wird transkribiert…',
 
     // Complete
     complete_title_pre: '',
@@ -497,6 +513,17 @@ const t = {
     phrases_btn_saving: 'Saving…',
     phrases_min: 'Please enter at least 3 phrases.',
 
+    // Phrase recorder
+    phrase_rec_title: 'Record phrase',
+    phrase_rec_btn: 'Record',
+    phrase_rec_recording: 'Recording…',
+    phrase_rec_transcribing: 'Transcribing…',
+    phrase_rec_confirm_label: 'Heard text — correct if needed:',
+    phrase_rec_confirm_btn: 'Confirm',
+    phrase_rec_cancel_btn: 'Cancel',
+    phrase_rec_mic_denied: 'Microphone access was denied.',
+    phrase_rec_error: 'Recording failed. Please try again.',
+
     // Memories
     mem_examples: [
       { text: 'Our family holiday in Mallorca in 1994 was my favourite ever. We had dinner together every evening.', memory_type: 'event' as const, source: 'client' as const },
@@ -520,6 +547,11 @@ const t = {
     mem_btn_finish: 'Complete ECHO Voice profile →',
     mem_btn_saving: 'Creating profile…',
     mem_min: 'Please add at least 3 memories.',
+
+    // Memory voice input
+    mem_voice_btn: 'Dictate',
+    mem_voice_listening: 'Listening…',
+    mem_voice_transcribing: 'Transcribing…',
 
     // Complete
     complete_title_pre: '',

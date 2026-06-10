@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Trash2, BookOpen } from 'lucide-react'
 import OnboardingLayout from '../../components/OnboardingLayout'
-import { submitMemories, buildPersonality } from '../../api/client'
+import VoiceMemoryInput from '../../components/VoiceMemoryInput'
+import { submitMemories, buildPersonality, createVoiceClone } from '../../api/client'
 import { useLang } from '../../context/LanguageContext'
 
 interface Memory {
@@ -47,6 +48,7 @@ export default function MemoriesPage() {
     try {
       await submitMemories({ client_id: clientId, memories })
       await buildPersonality(clientId)
+      await createVoiceClone(clientId)
       navigate('/onboarding/complete')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Ein Fehler ist aufgetreten.')
@@ -83,7 +85,13 @@ export default function MemoriesPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">{T.mem_text_label}</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <label className="form-label" style={{ margin: 0 }}>{T.mem_text_label}</label>
+              <VoiceMemoryInput
+                clientId={localStorage.getItem('echo_client_id') || ''}
+                onTranscribed={(transcribed) => setText((prev) => prev ? `${prev} ${transcribed}` : transcribed)}
+              />
+            </div>
             <textarea
               className="form-textarea"
               placeholder={T.mem_text_placeholder}

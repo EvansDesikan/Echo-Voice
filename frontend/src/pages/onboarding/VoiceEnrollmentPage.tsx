@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Mic, Square, CheckCircle, ChevronRight, Loader2, Upload } from 'lucide-react'
 import OnboardingLayout from '../../components/OnboardingLayout'
 import { useLang } from '../../context/LanguageContext'
-import { uploadVoiceRecording, createVoiceClone, getVoiceRecordings } from '../../api/client'
+import { uploadVoiceRecording, getVoiceRecordings } from '../../api/client'
 
 type RecordingState = 'idle' | 'recording' | 'done'
 
@@ -27,7 +27,7 @@ export default function VoiceEnrollmentPage() {
   const [elapsed, setElapsed] = useState(0)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [uploadPhase, setUploadPhase] = useState<'uploading' | 'cloning' | 'done' | null>(null)
+  const [uploadPhase, setUploadPhase] = useState<'uploading' | 'done' | null>(null)
   const mediaRecorder = useRef<MediaRecorder | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -181,8 +181,6 @@ export default function VoiceEnrollmentPage() {
         setUploadProgress(i + 1)
         await uploadVoiceRecording(clientId, pending[i].blob, pending[i].type, pending[i].index, pending[i].duration, pending[i].label)
       }
-      setUploadPhase('cloning')
-      await createVoiceClone(clientId)
       setUploadPhase('done')
       navigate('/onboarding/quiz')
     } catch (err) {
@@ -412,8 +410,6 @@ export default function VoiceEnrollmentPage() {
         {uploading && <Loader2 size={16} style={{ marginRight: 8, animation: 'spin 1s linear infinite' }} />}
         {uploadPhase === 'uploading'
           ? T.voice_uploading(uploadProgress, recordings.length)
-          : uploadPhase === 'cloning'
-          ? T.voice_creating_clone
           : uploadPhase === 'done'
           ? T.voice_upload_done
           : T.voice_btn_continue}

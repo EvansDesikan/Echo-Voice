@@ -281,6 +281,50 @@ export async function createVoiceClone(clientId: string): Promise<{ voice_id: st
   return post(`/onboard/create-voice-clone?client_id=${clientId}`, {})
 }
 
+export async function uploadPhraseRecording(
+  clientId: string,
+  audioBlob: Blob,
+  phraseText: string,
+  durationSeconds: number,
+): Promise<{ transcription: string; object_key: string; duration_seconds: number }> {
+  if (DEMO_MODE) {
+    await delay(800)
+    return { transcription: phraseText, object_key: `demo/${clientId}/phrase/0.webm`, duration_seconds: durationSeconds }
+  }
+  const form = new FormData()
+  form.append('client_id', clientId)
+  form.append('phrase_text', phraseText)
+  form.append('duration_seconds', String(durationSeconds))
+  form.append('audio', audioBlob, 'phrase.webm')
+  const res = await fetch(`${BASE}/onboard/phrase-recording`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Upload failed' }))
+    throw new Error(err.detail || 'Upload failed')
+  }
+  return res.json()
+}
+
+export async function transcribeMemoryAudio(
+  clientId: string,
+  audioBlob: Blob,
+  durationSeconds: number,
+): Promise<{ transcription: string }> {
+  if (DEMO_MODE) {
+    await delay(800)
+    return { transcription: 'Demo-Transkription: Hier steht Ihre Erinnerung.' }
+  }
+  const form = new FormData()
+  form.append('client_id', clientId)
+  form.append('duration_seconds', String(durationSeconds))
+  form.append('audio', audioBlob, 'memory.webm')
+  const res = await fetch(`${BASE}/onboard/memory-voice`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Upload failed' }))
+    throw new Error(err.detail || 'Upload failed')
+  }
+  return res.json()
+}
+
 // ─── Admin ────────────────────────────────────────────────────────────────────
 
 export const ADMIN_KEY_STORAGE = 'echo_admin_key'

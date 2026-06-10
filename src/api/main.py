@@ -2,6 +2,7 @@
 Backend Engineer — FastAPI Application Entry Point
 Wires together all routes and starts the async application.
 """
+import asyncio
 import base64
 import secrets
 import traceback
@@ -18,6 +19,7 @@ from pydantic import BaseModel
 from config.settings import settings
 from src.agent.conversation import ConversationAgent, ClientProfile
 from src.agent.personality import render_system_prompt
+from src.agent.stt import WhisperSTT
 from src.agent.voice_clone import VoiceCloneManager
 from src.data.database import init_db, get_db, AsyncSessionFactory, Client, QuestionnaireResponse, VoiceRecording, ConversationSession
 from src.questionnaire.scorer import process_questionnaire
@@ -187,6 +189,135 @@ async def add_memories(req: MemorySubmission):
     ids = store.add_memories_bulk(req.memories)
     logger.info(f"Added {len(ids)} memories for client {req.client_id}")
     return {"status": "ok", "memories_added": len(ids)}
+
+
+@app.post("/onboard/phrase-recording", status_code=status.HTTP_201_CREATED)
+async def upload_phrase_recording(
+    client_id: str = Form(...),
+    phrase_text: str = Form(...),
+    duration_seconds: float = Form(0),
+    audio: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload an audio recording of the client speaking a specific phrase.
+    Runs Whisper STT and returns the transcription for client review/correction.
+    Audio is saved as recording_type="phrase" to enrich the voice clone bank.
+    """
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    audio_bytes = await audio.read()
+
+    # STT — detect what the client actually said
+    stt = WhisperSTT.get_instance()
+    transcription = await stt.transcribe_bytes(audio_bytes, language=client.language or None)
+
+    # Upload to R2 — use phrase index based on existing phrase recording count
+    recs_result = await db.execute(
+        select(VoiceRecording).where(
+            VoiceRecording.client_id == client.id,
+            VoiceRecording.recording_type == "phrase",
+        )
+    )
+    phrase_count = len(recs_result.scalars().all())
+
+    enrollment = VoiceEnrollmentManager()
+    object_key, duration = await enrollment.upload_recording(
+        client_id=client_id,
+        audio_bytes=audio_bytes,
+        recording_type="phrase",
+        index=phrase_count,
+        duration_seconds=duration_seconds,
+    )
+
+    # Persist metadata
+    recording = VoiceRecording(
+        client_id=client.id,
+        minio_object_key=object_key,
+        duration_seconds=duration,
+        recording_type="phrase",
+        label=phrase_text[:512],
+        transcription=transcription,
+    )
+    db.add(recording)
+    await db.commit()
+
+    logger.info(f"Phrase recording saved: '{phrase_text[:40]}' → {object_key}, stt='{transcription[:60]}'")
+    return {
+        "transcription": transcription,
+        "object_key": object_key,
+        "duration_seconds": duration,
+    }
+
+
+@app.post("/onboard/memory-voice")
+async def transcribe_memory_voice(
+    client_id: str = Form(...),
+    duration_seconds: float = Form(0),
+    audio: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Transcribe a spoken memory and return the text to the client for review/editing.
+    Also saves the audio as a spontaneous recording (enriches the voice clone bank silently).
+    The transcription is returned immediately; the R2 upload runs as a background task.
+    """
+    result = await db.execute(select(Client).where(Client.id == uuid.UUID(client_id)))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    audio_bytes = await audio.read()
+
+    # STT — primary purpose, must complete before we return
+    stt = WhisperSTT.get_instance()
+    transcription = await stt.transcribe_bytes(audio_bytes, language=client.language or None)
+
+    # Count existing spontaneous recordings to get next index (offset by 100 to avoid collision)
+    recs_result = await db.execute(
+        select(VoiceRecording).where(
+            VoiceRecording.client_id == client.id,
+            VoiceRecording.recording_type == "spontaneous",
+        )
+    )
+    spontaneous_count = len(recs_result.scalars().all())
+    next_index = 100 + spontaneous_count
+    client_id_str = str(client.id)
+    transcription_label = transcription[:80]
+
+    async def _upload_to_r2():
+        """Background task: upload audio to R2 and persist DB record."""
+        try:
+            enrollment = VoiceEnrollmentManager()
+            object_key, dur = await enrollment.upload_recording(
+                client_id=client_id_str,
+                audio_bytes=audio_bytes,
+                recording_type="spontaneous",
+                index=next_index,
+                duration_seconds=duration_seconds,
+            )
+            async with AsyncSessionFactory() as bg_db:
+                rec = VoiceRecording(
+                    client_id=client.id,
+                    minio_object_key=object_key,
+                    duration_seconds=dur,
+                    recording_type="spontaneous",
+                    label=f"Memory voice: {transcription_label}",
+                    transcription=transcription,
+                )
+                bg_db.add(rec)
+                await bg_db.commit()
+            logger.info(f"Memory voice recording saved to R2: {object_key}")
+        except Exception as e:
+            logger.warning(f"Memory voice background upload failed for {client_id_str}: {e}")
+
+    asyncio.create_task(_upload_to_r2())
+
+    logger.info(f"Memory voice transcribed for client {client_id}: '{transcription[:80]}'")
+    return {"transcription": transcription}
 
 
 @app.post("/onboard/voice-upload", status_code=status.HTTP_201_CREATED)
@@ -614,6 +745,9 @@ async def voice_session(websocket: WebSocket, session_id: str):
                     db_sess.turn_count = (db_sess.turn_count or 0) + turn_count
                     db_sess.ended_at = __import__('datetime').datetime.utcnow()
                     await db.commit()
+        # Fire memory extraction as background task — non-blocking
+        if agent and turn_count >= 3:
+            asyncio.create_task(agent.extract_and_store_memories())
         active_sessions.pop(session_id, None)
 
 
@@ -627,7 +761,10 @@ async def end_session(session_id: str, db: AsyncSession = Depends(get_db)):
         if db_sess:
             db_sess.ended_at = __import__('datetime').datetime.utcnow()
             await db.commit()
-    active_sessions.pop(session_id, None)
+    agent = active_sessions.pop(session_id, None)
+    # Fire memory extraction as background task — non-blocking
+    if agent and len(agent.history) >= 6:
+        asyncio.create_task(agent.extract_and_store_memories())
     return {"status": "session ended"}
 
 

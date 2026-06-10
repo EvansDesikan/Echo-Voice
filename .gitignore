@@ -12,3 +12,5 @@ data/chroma/
 data/audio/
 *.egg-info/
 .DS_Store
+
+.vercel

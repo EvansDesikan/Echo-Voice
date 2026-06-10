@@ -4,7 +4,10 @@ Orchestrates the full turn cycle:
   Family speaks → Whisper STT → Claude (personality + RAG) → ElevenLabs TTS → audio bytes
 
 Also manages conversation history for multi-turn coherence.
+Memory write-back: at session end, extracts new facts from the transcript and
+stores them in ChromaDB as source="family" — the compounding memory system.
 """
+import json
 import time
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -128,3 +131,68 @@ class ConversationAgent:
     def reset_history(self):
         """Clear conversation history (new session)."""
         self.history.clear()
+
+    async def extract_and_store_memories(self) -> int:
+        """
+        Mine the conversation transcript for new facts the family member revealed
+        and write them to ChromaDB as source="family" memories.
+
+        Only runs when there are at least 3 full turns (6 history items).
+        Called as a background asyncio task — never blocks session teardown.
+        Returns the count of memories stored.
+        """
+        if len(self.history) < 6:
+            logger.debug(f"Memory extraction skipped for {self.profile.client_id}: too few turns")
+            return 0
+
+        transcript_lines = []
+        for turn in self.history:
+            speaker = "Family member" if turn.role == "user" else self.profile.client_name
+            transcript_lines.append(f"{speaker}: {turn.content}")
+        transcript = "\n".join(transcript_lines)
+
+        extraction_prompt = f"""You are reviewing a conversation between a family member and an AI memorial of {self.profile.client_name}.
+
+Extract NEW facts, memories, relationships, or personal details that the FAMILY MEMBER mentioned — things that enrich what the memorial knows about its relationships, shared history, and the people who love it.
+
+Do NOT extract:
+- Things the AI (acting as {self.profile.client_name}) said — those are already encoded in the persona
+- Generic pleasantries with no specific information
+- Anything obviously already known (birth facts, common family knowledge)
+
+Return a JSON array. Each element: {{"text": "<fact as a short, first-person-adjacent statement>", "memory_type": "<event|relationship|value|phrase>"}}
+
+If nothing meaningful was revealed, return [].
+
+Transcript:
+{transcript}
+
+Return ONLY the JSON array, no other text."""
+
+        try:
+            response = await self._anthropic.messages.create(
+                model=settings.CLAUDE_MODEL,
+                max_tokens=800,
+                messages=[{"role": "user", "content": extraction_prompt}],
+            )
+            raw = response.content[0].text.strip()
+            extracted = json.loads(raw)
+            if not isinstance(extracted, list):
+                return 0
+
+            count = 0
+            for item in extracted:
+                if isinstance(item, dict) and "text" in item and item["text"].strip():
+                    self._memory.add_memory(
+                        text=item["text"].strip(),
+                        source="family",
+                        memory_type=item.get("memory_type", "event"),
+                    )
+                    count += 1
+
+            logger.info(f"Memory extraction: {count} new memories stored for client {self.profile.client_id}")
+            return count
+
+        except Exception as e:
+            logger.warning(f"Memory extraction failed for {self.profile.client_id}: {e}")
+            return 0
