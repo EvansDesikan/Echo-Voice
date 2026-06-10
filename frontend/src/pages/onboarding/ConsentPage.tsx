@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { CheckCircle, Loader2 } from 'lucide-react'
 import OnboardingLayout from '../../components/OnboardingLayout'
-import { registerConsent } from '../../api/client'
+import { registerConsent, sendVerification, verifyCode } from '../../api/client'
 import { useLang } from '../../context/LanguageContext'
+
+type OtpState = 'idle' | 'sending' | 'sent' | 'verifying' | 'verified'
 
 export default function ConsentPage() {
   const navigate = useNavigate()
@@ -14,9 +17,62 @@ export default function ConsentPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // OTP state
+  const [otpState, setOtpState] = useState<OtpState>('idle')
+  const [otpCode, setOtpCode] = useState('')
+  const [otpError, setOtpError] = useState('')
+  const [verifiedEmail, setVerifiedEmail] = useState('')
+
   const allChecked = Object.values(checks).every(Boolean)
-  const canSubmit = name.trim() && email.trim() && allChecked
+  const emailVerified = otpState === 'verified' && verifiedEmail === email.trim().toLowerCase()
+  const canSubmit = name.trim() && email.trim() && allChecked && emailVerified
+
   const toggle = (key: keyof typeof checks) => setChecks((p) => ({ ...p, [key]: !p[key] }))
+
+  async function handleSendCode() {
+    const trimmed = email.trim().toLowerCase()
+    if (!trimmed) return
+    setOtpError('')
+    setOtpState('sending')
+    try {
+      await sendVerification(trimmed, language)
+      setOtpState('sent')
+      setOtpCode('')
+    } catch {
+      setOtpError(T.consent_otp_error_send)
+      setOtpState('idle')
+    }
+  }
+
+  async function handleVerifyCode() {
+    const trimmed = email.trim().toLowerCase()
+    if (!otpCode.trim()) return
+    setOtpError('')
+    setOtpState('verifying')
+    try {
+      const res = await verifyCode(trimmed, otpCode.trim())
+      if (res.verified) {
+        setOtpState('verified')
+        setVerifiedEmail(trimmed)
+      } else {
+        setOtpError(T.consent_otp_error_verify)
+        setOtpState('sent')
+      }
+    } catch {
+      setOtpError(T.consent_otp_error_verify)
+      setOtpState('sent')
+    }
+  }
+
+  // If the email field changes after verification, invalidate
+  function handleEmailChange(value: string) {
+    setEmail(value)
+    if (otpState === 'verified' && value.trim().toLowerCase() !== verifiedEmail) {
+      setOtpState('idle')
+      setOtpCode('')
+      setOtpError('')
+    }
+  }
 
   async function handleSubmit() {
     setLoading(true); setError('')
@@ -44,10 +100,80 @@ export default function ConsentPage() {
             <label className="form-label">{T.consent_name_label}</label>
             <input className="form-input" type="text" placeholder={T.consent_name_placeholder} value={name} onChange={(e) => setName(e.target.value)} />
           </div>
+
+          {/* Email + OTP verification */}
           <div className="form-group">
             <label className="form-label">{T.consent_email_label}</label>
-            <input className="form-input" type="email" placeholder={T.consent_email_placeholder} value={email} onChange={(e) => setEmail(e.target.value)} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="form-input"
+                type="email"
+                placeholder={T.consent_email_placeholder}
+                value={email}
+                onChange={(e) => handleEmailChange(e.target.value)}
+                disabled={otpState === 'verified'}
+                style={{ flex: 1 }}
+              />
+              {otpState !== 'verified' && (
+                <button
+                  className="btn btn--secondary"
+                  onClick={handleSendCode}
+                  disabled={!email.trim() || otpState === 'sending'}
+                  style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+                >
+                  {otpState === 'sending'
+                    ? <><Loader2 size={14} style={{ marginRight: 6, animation: 'spin 1s linear infinite' }} />{T.consent_otp_sending}</>
+                    : otpState === 'sent' || otpState === 'verifying'
+                    ? T.consent_otp_resend
+                    : T.consent_otp_send_btn
+                  }
+                </button>
+              )}
+            </div>
+
+            {/* OTP sent — show code input */}
+            {(otpState === 'sent' || otpState === 'verifying') && (
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p style={{ fontSize: '0.82rem', color: 'var(--primary)', margin: 0 }}>{T.consent_otp_sent}</p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="form-input"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder={T.consent_otp_placeholder}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    style={{ flex: 1, letterSpacing: '0.2em', fontFamily: 'monospace', fontSize: '1.1rem' }}
+                    autoFocus
+                  />
+                  <button
+                    className="btn btn--primary"
+                    onClick={handleVerifyCode}
+                    disabled={otpCode.length !== 6 || otpState === 'verifying'}
+                    style={{ flexShrink: 0 }}
+                  >
+                    {otpState === 'verifying'
+                      ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                      : T.consent_otp_verify_btn
+                    }
+                  </button>
+                </div>
+                {otpError && (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--danger)', margin: 0 }}>{otpError}</p>
+                )}
+              </div>
+            )}
+
+            {/* Verified badge */}
+            {otpState === 'verified' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, color: 'var(--success)', fontSize: '0.85rem', fontWeight: 600 }}>
+                <CheckCircle size={15} />
+                {T.consent_otp_verified}
+              </div>
+            )}
           </div>
+
           <div className="form-group">
             <label className="form-label">{T.consent_lang_label}</label>
             <select className="form-select" value={language} onChange={(e) => setLanguage(e.target.value as 'de' | 'en')}>

@@ -141,6 +141,22 @@ export async function submitMemories(data: {
   return post('/onboard/memories', data)
 }
 
+export async function sendVerification(email: string, language: string): Promise<{ status: string }> {
+  if (DEMO_MODE) {
+    await delay(600)
+    return { status: 'sent' }
+  }
+  return post('/auth/send-verification', { email, language })
+}
+
+export async function verifyCode(email: string, code: string): Promise<{ verified: boolean }> {
+  if (DEMO_MODE) {
+    await delay(400)
+    return { verified: code === '123456' }
+  }
+  return post('/auth/verify-code', { email, code })
+}
+
 export async function buildPersonality(clientId: string): Promise<{ status: string }> {
   if (DEMO_MODE) {
     await delay(900)

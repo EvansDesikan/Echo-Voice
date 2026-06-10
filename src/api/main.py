@@ -21,7 +21,8 @@ from src.agent.conversation import ConversationAgent, ClientProfile
 from src.agent.personality import render_system_prompt
 from src.agent.stt import WhisperSTT
 from src.agent.voice_clone import VoiceCloneManager
-from src.data.database import init_db, get_db, AsyncSessionFactory, Client, QuestionnaireResponse, VoiceRecording, ConversationSession
+from src.data.database import init_db, get_db, AsyncSessionFactory, Client, QuestionnaireResponse, VoiceRecording, ConversationSession, EmailVerification
+from src.email.service import send_otp_email, send_access_code_email
 from src.questionnaire.scorer import process_questionnaire
 from src.voice.enrollment import VoiceEnrollmentManager
 
@@ -492,10 +493,114 @@ async def build_personality_prompt(
     )
     client.personality_prompt = prompt
     client.onboarding_complete = True
+
+    # Generate access code now if not already set
+    if not client.family_access_code:
+        client.family_access_code = await _generate_unique_code(db)
+
     await db.commit()
 
-    logger.success(f"Personality prompt built for {client.id}")
+    # Send access code email as background task — non-blocking
+    access_code = client.family_access_code
+    client_email = client.email
+    client_name = client.full_name
+    client_lang = client.language or "de"
+    asyncio.create_task(
+        send_access_code_email(client_email, client_name, access_code, client_lang)
+    )
+
+    logger.success(f"Personality prompt built for {client.id}, access code email queued")
     return {"status": "ok", "prompt_length": len(prompt)}
+
+
+# ─── Email verification routes ────────────────────────────────────────────────
+
+class SendVerificationRequest(BaseModel):
+    email: str
+    language: str = "de"
+
+class VerifyCodeRequest(BaseModel):
+    email: str
+    code: str
+
+
+@app.post("/auth/send-verification")
+async def send_verification(
+    req: SendVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate a 6-digit OTP and email it to the given address.
+    Rate-limited implicitly: invalidates all prior unused codes for this email first.
+    """
+    from datetime import datetime, timedelta
+    import random
+
+    email = req.email.strip().lower()
+    code = f"{random.randint(0, 999999):06d}"
+    expires_at = datetime.utcnow() + timedelta(minutes=15)
+
+    # Mark any existing unused codes for this email as used (one active OTP at a time)
+    existing = await db.execute(
+        select(EmailVerification).where(
+            EmailVerification.email == email,
+            EmailVerification.used == False,
+        )
+    )
+    for old in existing.scalars().all():
+        old.used = True
+
+    verification = EmailVerification(
+        email=email,
+        code=code,
+        expires_at=expires_at,
+        used=False,
+    )
+    db.add(verification)
+    await db.commit()
+
+    sent = await send_otp_email(email, code, req.language)
+    if not sent:
+        raise HTTPException(status_code=500, detail="Failed to send verification email. Please try again.")
+
+    logger.info(f"OTP sent to {email}")
+    return {"status": "sent"}
+
+
+@app.post("/auth/verify-code")
+async def verify_code(
+    req: VerifyCodeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Validate the OTP. Returns verified=True on success.
+    Marks the code as used so it cannot be replayed.
+    """
+    from datetime import datetime
+
+    email = req.email.strip().lower()
+    result = await db.execute(
+        select(EmailVerification).where(
+            EmailVerification.email == email,
+            EmailVerification.code == req.code.strip(),
+            EmailVerification.used == False,
+        )
+    )
+    verification = result.scalar_one_or_none()
+
+    if not verification:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification code.")
+
+    if verification.expires_at < datetime.utcnow():
+        verification.used = True
+        await db.commit()
+        raise HTTPException(status_code=400, detail="Verification code has expired. Please request a new one.")
+
+    verification.used = True
+    await db.commit()
+
+    logger.info(f"Email verified: {email}")
+    return {"verified": True}
 
 
 # ─── Auth routes ─────────────────────────────────────────────────────────────

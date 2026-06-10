@@ -98,6 +98,18 @@ class ConversationSession(Base):
     client = relationship("Client", back_populates="sessions")
 
 
+class EmailVerification(Base):
+    """One-time OTP codes sent to verify client email ownership before consent."""
+    __tablename__ = "email_verifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), nullable=False, index=True)
+    code = Column(String(6), nullable=False)       # 6-digit numeric OTP
+    expires_at = Column(DateTime, nullable=False)  # 15 minutes from creation
+    used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # ─── Async engine & session factory ─────────────────────────────────────────
 
 engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG)
@@ -121,6 +133,11 @@ async def init_db():
         await conn.execute(
             __import__('sqlalchemy').text(
                 "ALTER TABLE clients ADD COLUMN IF NOT EXISTS family_access_code VARCHAR(20) UNIQUE"
+            )
+        )
+        await conn.execute(
+            __import__('sqlalchemy').text(
+                "ALTER TABLE clients ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE"
             )
         )
 

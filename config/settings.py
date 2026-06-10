@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # ElevenLabs
     ELEVENLABS_MODEL: str = "eleven_turbo_v2_5"  # fastest, lowest latency
 
+    # Email (Resend)
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "ECHO Voice <noreply@echo-voice.app>"
+
     # Security
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
