@@ -183,6 +183,7 @@ const t = {
     phrase_rec_cancel_btn: 'Abbrechen',
     phrase_rec_mic_denied: 'Mikrofon-Zugriff wurde verweigert.',
     phrase_rec_error: 'Aufnahme fehlgeschlagen. Bitte erneut versuchen.',
+    phrase_rec_done: 'Aufgenommen',
 
     // Memories
     mem_examples: [
@@ -523,6 +524,7 @@ const t = {
     phrase_rec_cancel_btn: 'Cancel',
     phrase_rec_mic_denied: 'Microphone access was denied.',
     phrase_rec_error: 'Recording failed. Please try again.',
+    phrase_rec_done: 'Recorded',
 
     // Memories
     mem_examples: [

@@ -161,7 +161,7 @@ export default function PhraseBankPage() {
                       </span>
                       {isRecorded ? (
                         <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#16a34a', fontWeight: 600 }}>
-                          <Check size={13} /> Aufgenommen
+                          <Check size={13} /> {T.phrase_rec_done}
                         </span>
                       ) : (
                         <button
@@ -176,7 +176,7 @@ export default function PhraseBankPage() {
                             cursor: 'pointer',
                           }}
                         >
-                          {(T as unknown as Record<string, string>).phrase_rec_btn ?? 'Aufnehmen'}
+                          {T.phrase_rec_btn}
                         </button>
                       )}
                     </div>
